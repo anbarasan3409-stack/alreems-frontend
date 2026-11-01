@@ -1,0 +1,210 @@
+[
+  {
+    "title": "Silambam Class",
+    "description": "An ancient Indian martial art emphasizing self-discipline, agility, and stick fighting techniques.",
+    "icon": "SIL",
+    "gradient": "from-orange-500 to-red-500",
+    "mode": "offline",
+    "image": "/assets/courses/silambam.jpeg"
+  },
+  {
+    "title": "Karate Class",
+    "description": "Focus on discipline, strength, and self-defense helping students build confidence and physical fitness.",
+    "icon": "KAR",
+    "gradient": "from-slate-600 to-gray-800",
+    "mode": "offline",
+    "image": null
+  },
+  {
+    "title": "Badminton Coaching",
+    "description": "Structured training to develop skills, technique, and strategy for players of all levels.",
+    "icon": "BAD",
+    "gradient": "from-yellow-400 to-orange-500",
+    "mode": "offline",
+    "image": "/assets/courses/badminton.jpeg"
+  },
+  {
+    "title": "Bharathanatyam",
+    "description": "A classical dance form known for its elegance, expressive storytelling, and intricate movements.",
+    "icon": "BHA",
+    "gradient": "from-rose-500 to-pink-600",
+    "mode": "offline",
+    "image": "/assets/courses/bharathanatyam.jpeg"
+  },
+  {
+    "title": "Carnatic Vocal",
+    "description": "Revered classical art form blending rich ragas and talas for a spiritually uplifting experience.",
+    "icon": "VOC",
+    "gradient": "from-indigo-500 to-purple-600",
+    "mode": "offline",
+    "image": "/assets/courses/carnatic_vocal.jpeg"
+  },
+  {
+    "title": "Parai Class",
+    "description": "Master the Parai drum, one of the oldest percussion instruments in India symbolizing cultural pride.",
+    "icon": "PAR",
+    "gradient": "from-amber-600 to-orange-700",
+    "mode": "online",
+    "image": "/assets/courses/parai_class.jpeg"
+  },
+  {
+    "title": "Flute Class",
+    "description": "A delightful journey into the art of playing the flute, blending foundational techniques with musicality.",
+    "icon": "FLU",
+    "gradient": "from-cyan-500 to-blue-500",
+    "mode": "online",
+    "image": "/assets/courses/flute.jpeg"
+  },
+  {
+    "title": "Violin Class",
+    "description": "Develop technique, ear training, and musical sensitivity in classical or contemporary styles.",
+    "icon": "VIO",
+    "gradient": "from-amber-500 to-red-500",
+    "mode": "online",
+    "image": "/assets/courses/violin.jpeg"
+  },
+  {
+    "title": "Keyboard Class",
+    "description": "Learn to play the keyboard with proper techniques, chords, and contemporary music styles.",
+    "icon": "KEY",
+    "gradient": "from-zinc-500 to-stone-700",
+    "mode": "online",
+    "image": "/assets/courses/keyboard.jpeg"
+  },
+  {
+    "title": "Guitar Class",
+    "description": "Structured way to learn guitar, from mastering basic chords to advanced techniques.",
+    "icon": "GUI",
+    "gradient": "from-amber-600 to-yellow-600",
+    "mode": "online",
+    "image": "/assets/courses/guitar.jpeg"
+  },
+  {
+    "title": "Chess Class",
+    "description": "Master the timeless game of chess with theory, practical exercises, and strategic gameplay.",
+    "icon": "CHE",
+    "gradient": "from-slate-700 to-gray-900",
+    "mode": "online",
+    "image": null
+  },
+  {
+    "title": "Abacus Class",
+    "description": "Enhance cognitive skills through mental arithmetic. Develop improved concentration and memory.",
+    "icon": "ABA",
+    "gradient": "from-teal-500 to-emerald-500",
+    "mode": "online",
+    "image": "/assets/courses/abacus.jpeg"
+  },
+  {
+    "title": "Tamilar Kaaviyamum",
+    "description": "Explore literary masterpieces that reflect the valor, wisdom, and deep philosophy of the Tamil people.",
+    "icon": "TAM",
+    "gradient": "from-orange-400 to-red-500",
+    "mode": "offline",
+    "image": "/assets/courses/tamilar_kaaviyamum.jpeg"
+  },
+  {
+    "title": "Art and Craft Class",
+    "description": "Ignite creativity and self-expression, allowing students to explore their imaginations.",
+    "icon": "ART",
+    "gradient": "from-pink-500 to-rose-500",
+    "mode": "online",
+    "image": "/assets/courses/art_craft.jpeg"
+  },
+  {
+    "title": "Magic Class",
+    "description": "Embodiment of wonder and discovery, blending the fantastical with the practical.",
+    "icon": "MAG",
+    "gradient": "from-purple-500 to-indigo-600",
+    "mode": "online",
+    "image": "/assets/courses/magic_class.jpeg"
+  },
+  {
+    "title": "Tamil Language",
+    "description": "Learn one of the oldest living languages, known for its deep literary heritage.",
+    "icon": "TML",
+    "gradient": "from-red-500 to-rose-600",
+    "mode": "offline",
+    "image": "/assets/courses/tamil.jpeg"
+  },
+  {
+    "title": "English Language",
+    "description": "Master the global means of communication for international business, science, and technology.",
+    "icon": "ENG",
+    "gradient": "from-blue-600 to-indigo-700",
+    "mode": "online",
+    "image": "/assets/courses/english.jpeg"
+  },
+  {
+    "title": "Arabic Language",
+    "description": "Learn Arabic, a Semitic language with a rich history influencing science, literature, and philosophy.",
+    "icon": "ARA",
+    "gradient": "from-emerald-600 to-green-700",
+    "mode": "online",
+    "image": "/assets/courses/arabic.jpeg"
+  },
+  {
+    "title": "Hindi Language",
+    "description": "Learn Hindi, one of the most widely spoken languages in the world, vital for culture and media.",
+    "icon": "HIN",
+    "gradient": "from-orange-500 to-amber-600",
+    "mode": "online",
+    "image": "/assets/courses/hindi.jpeg"
+  },
+  {
+    "title": "French Language",
+    "description": "Open the door to global communication, culture, and opportunity with the language of diplomacy.",
+    "icon": "FRE",
+    "gradient": "from-blue-500 to-red-500",
+    "mode": "online",
+    "image": "/assets/courses/french.jpeg"
+  },
+  {
+    "title": "Vedic Maths",
+    "description": "A system of calculation providing a unique approach to arithmetic and algebraic problems.",
+    "icon": "VED",
+    "gradient": "from-yellow-500 to-orange-500",
+    "mode": "online",
+    "image": "/assets/courses/vedic.jpeg"
+  },
+  {
+    "title": "Academic Tuition",
+    "description": "Expert tuition for all major subjects ensuring a strong foundation for Grade 5 to 12 students.",
+    "icon": "EDU",
+    "gradient": "from-blue-500 to-cyan-500",
+    "mode": "online",
+    "image": "/assets/courses/school.jpeg"
+  },
+  {
+    "title": "Aari Class",
+    "description": "Learn the traditional embroidery technique known for intricate and elegant designs.",
+    "icon": "AAR",
+    "gradient": "from-pink-400 to-rose-500",
+    "mode": "online",
+    "image": "/assets/courses/aari_class.jpeg"
+  },
+  {
+    "title": "Sewing & Embroidery",
+    "description": "Timeless crafts that blend creativity and precision, transforming fabric into functional art.",
+    "icon": "SEW",
+    "gradient": "from-purple-400 to-pink-500",
+    "mode": "online",
+    "image": "/assets/courses/sewing.jpeg"
+  },
+  {
+    "title": "Yoga Class",
+    "description": "Improve your flexibility, strength, and mental well-being through guided yoga sessions.",
+    "icon": "YOG",
+    "gradient": "from-teal-400 to-green-500",
+    "mode": "offline",
+    "image": null
+  },
+  {
+    "title": "Business Studies",
+    "description": "Learn the fundamentals of business, economics, and entrepreneurship.",
+    "icon": "BUS",
+    "gradient": "from-blue-600 to-indigo-800",
+    "mode": "offline",
+    "image": null
+  }
+]

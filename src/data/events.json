@@ -1,0 +1,34 @@
+[
+  {
+    "id": 1,
+    "title": "Annual Sports Meet 2025",
+    "date": "March 15, 2025",
+    "description": "Join us for our annual sports meet featuring athletics, team sports, and exciting competitions.",
+    "image": "https://images.unsplash.com/photo-1461896836934-ffe607ba8211?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
+    "color": "from-blue-500 to-indigo-600"
+  },
+  {
+    "id": 2,
+    "title": "Cultural Fest - Sangam",
+    "date": "April 10, 2025",
+    "description": "A celebration of arts, music, and dance showcasing the diverse talents of our students.",
+    "image": "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
+    "color": "from-purple-500 to-pink-600"
+  },
+  {
+    "id": 3,
+    "title": "Science Exhibition",
+    "date": "May 5, 2025",
+    "description": "Explore innovative projects and experiments created by our bright young scientists.",
+    "image": "https://images.unsplash.com/photo-1532094349884-543bc11b234d?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
+    "color": "from-teal-500 to-emerald-600"
+  },
+  {
+    "id": 4,
+    "title": "Parent-Teacher Meeting",
+    "date": "June 20, 2025",
+    "description": "An interactive session to discuss student progress, achievements, and goals for the term.",
+    "image": "https://images.unsplash.com/photo-1577896851231-70ef18881754?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
+    "color": "from-orange-500 to-red-600"
+  }
+]
