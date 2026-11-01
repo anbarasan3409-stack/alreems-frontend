@@ -30,5 +30,13 @@
     "description": "An interactive session to discuss student progress, achievements, and goals for the term.",
     "image": "https://images.unsplash.com/photo-1577896851231-70ef18881754?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
     "color": "from-orange-500 to-red-600"
+  },
+  {
+    "id": 5,
+    "title": "Graduation Day 2025",
+    "date": "July 18, 2025",
+    "description": "Celebrating our graduating students as they complete their journey and step into a bright future.",
+    "image": "https://images.unsplash.com/photo-1541339907198-e08756dedf3f?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
+    "color": "from-yellow-500 to-amber-600"
   }
 ]
