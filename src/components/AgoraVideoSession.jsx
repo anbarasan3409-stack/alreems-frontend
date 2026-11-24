@@ -47,7 +47,9 @@ const AgoraVideoSession = ({
   sessionTitle,
   studentId,
   studentName,
-  studentEmail
+  studentEmail,
+  teacherName: propTeacherName,
+  teacherId: propTeacherId
 }) => {
   // State management
   const [isJoined, setIsJoined] = useState(false);
@@ -57,6 +59,9 @@ const AgoraVideoSession = ({
   const [localVideoTrack, setLocalVideoTrack] = useState(null);
   const [localAudioTrack, setLocalAudioTrack] = useState(null);
   const [remoteUsers, setRemoteUsers] = useState(new Map());
+  const [userRoles, setUserRoles] = useState(new Map());
+  const [resolvedTeacherName, setResolvedTeacherName] = useState(propTeacherName || '');
+  const [resolvedTeacherId, setResolvedTeacherId] = useState(propTeacherId || null);
 
   // Whiteboard states
   const [showWhiteboard, setShowWhiteboard] = useState(false);
@@ -355,6 +360,19 @@ const AgoraVideoSession = ({
                 });
               }
             }
+          } else if (msg.type === 'user_role') {
+            if (msg.uid && msg.role) {
+              setUserRoles(prev => {
+                const next = new Map(prev);
+                next.set(msg.uid, msg.role);
+                next.set(Number(msg.uid), msg.role);
+                next.set(String(msg.uid), msg.role);
+                return next;
+              });
+              if (msg.role === 'teacher' && msg.name) {
+                setResolvedTeacherName(msg.name);
+              }
+            }
           } else if (msg.type === 'teacher_control') {
             const myUid = clientRef.current?.uid || uid;
             const matchesMe = 
@@ -425,6 +443,7 @@ const AgoraVideoSession = ({
           if (!current) return;
           const payload = JSON.stringify({
             type: 'student_info',
+            role: 'student',
             uid: uid,
             studentId: studentId,
             name: studentName,
@@ -435,6 +454,10 @@ const AgoraVideoSession = ({
           // Request whiteboard sync from teacher in case teacher already opened it
           const syncReq = JSON.stringify({ type: 'wb', a: 'req' });
           await current.sendStreamMessage(syncReq);
+
+          // Query roles from instructor/admin
+          const roleReq = JSON.stringify({ type: 'role_query' });
+          await current.sendStreamMessage(roleReq);
         } catch (e) {
           console.warn('Failed to broadcast profile / sync:', e);
         }
@@ -1051,56 +1074,74 @@ Or in browser settings:
               </div>
             )}
 
-            {remoteUsers.size > 0 ? (
-              // If single remote user (instructor), take full screen.
-              // If multiple remote users, show as responsive grid
-              <div className={`w-full h-full ${
-                remoteUsers.size === 1 
-                  ? 'relative' 
-                  : 'grid grid-cols-1 md:grid-cols-2 gap-2 p-2 overflow-y-auto'
-              }`}>
-                {Array.from(remoteUsers.values()).map((user, idx) => (
-                  <div key={user.uid} className={`w-full h-full relative ${remoteUsers.size > 1 ? 'min-h-[220px] bg-gray-900 rounded-lg overflow-hidden' : ''}`}>
-                    <div 
-                      id={`remote-video-${user.uid}`}
-                      className="w-full h-full bg-gray-900 relative"
-                    >
-                      {!user.hasVideo && (
-                        <div className="absolute inset-0 flex items-center justify-center text-gray-400">
-                          <div className="text-center">
-                            <Users size={remoteUsers.size > 1 ? 36 : 64} className="mx-auto mb-3" />
-                            <p className={remoteUsers.size > 1 ? 'text-sm font-medium' : 'text-xl'}>
-                              {idx === 0 ? "Instructor's camera is off" : `Participant ${String(user.uid).slice(-4)}`}
-                            </p>
-                          </div>
+            {(() => {
+              const remoteUsersArray = Array.from(remoteUsers.values());
+              const getRoleForUser = (user) => {
+                const uid = user.uid;
+                const recorded = userRoles.get(uid) || userRoles.get(Number(uid)) || userRoles.get(String(uid));
+                if (recorded) return recorded;
+                if (resolvedTeacherId && (Number(uid) === Number(resolvedTeacherId) || String(uid) === String(resolvedTeacherId))) {
+                  return 'teacher';
+                }
+                return 'teacher';
+              };
+              
+              const teacherUser = remoteUsersArray.find(u => getRoleForUser(u) === 'teacher') || remoteUsersArray.find(u => getRoleForUser(u) !== 'admin') || remoteUsersArray[0];
+              const adminUsers = remoteUsersArray.filter(u => getRoleForUser(u) === 'admin' && u.uid !== teacherUser?.uid);
+
+              return teacherUser ? (
+                <div className="w-full h-full relative bg-gray-900">
+                  <div 
+                    id={`remote-video-${teacherUser.uid}`}
+                    className="w-full h-full bg-gray-900 relative"
+                  >
+                    {!teacherUser.hasVideo && (
+                      <div className="absolute inset-0 flex items-center justify-center text-gray-400">
+                        <div className="text-center">
+                          <Users size={64} className="mx-auto mb-3" />
+                          <p className="text-xl">
+                            Instructor's camera is off
+                          </p>
                         </div>
-                      )}
-                    </div>
-                    <div className="absolute top-4 left-4 bg-black bg-opacity-70 text-white px-3 py-1.5 rounded-lg text-xs md:text-sm">
-                      <p className="font-semibold">{idx === 0 ? 'Instructor' : `Participant (${String(user.uid).slice(-4)})`}</p>
-                      <div className="flex items-center gap-3 mt-1 text-xs">
-                        <div className="flex items-center gap-1">
-                          <div className={`w-2 h-2 rounded-full ${user.hasAudio ? 'bg-green-400' : 'bg-red-400'}`}></div>
-                          <span>{user.hasAudio ? 'Audio' : 'Muted'}</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <div className={`w-2 h-2 rounded-full ${user.hasVideo ? 'bg-green-400' : 'bg-red-400'}`}></div>
-                          <span>{user.hasVideo ? 'Video' : 'No video'}</span>
-                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <div className="absolute top-4 left-4 bg-black bg-opacity-70 text-white px-3 py-1.5 rounded-lg text-xs md:text-sm z-10">
+                    <p className="font-semibold">{resolvedTeacherName ? `${resolvedTeacherName} (Instructor)` : 'Instructor'}</p>
+                    <div className="flex items-center gap-3 mt-1 text-xs">
+                      <div className="flex items-center gap-1">
+                        <div className={`w-2 h-2 rounded-full ${teacherUser.hasAudio ? 'bg-green-400' : 'bg-red-400'}`}></div>
+                        <span>{teacherUser.hasAudio ? 'Audio' : 'Muted'}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <div className={`w-2 h-2 rounded-full ${teacherUser.hasVideo ? 'bg-green-400' : 'bg-red-400'}`}></div>
+                        <span>{teacherUser.hasVideo ? 'Video' : 'No video'}</span>
                       </div>
                     </div>
                   </div>
-                ))}
-              </div>
-            ) : (
-              // Waiting for instructor
-              <div className="w-full h-full flex items-center justify-center bg-gray-900">
-                <div className="text-center text-gray-400">
-                  <Users size={64} className="mx-auto mb-4 opacity-50" />
-                  <p className="text-xl">Waiting for instructor to join...</p>
+
+                  {/* If Admin is present, show small observer badge in top-right */}
+                  {adminUsers.length > 0 && (
+                    <div className="absolute top-4 right-4 z-20 flex flex-col gap-2">
+                      {adminUsers.map(admin => (
+                        <div key={admin.uid} className="bg-black/70 backdrop-blur-md border border-purple-500/50 rounded-xl px-3 py-1.5 flex items-center gap-2 text-xs text-purple-200 shadow-md">
+                          <span className="w-2 h-2 rounded-full bg-purple-400"></span>
+                          <span className="font-semibold">Administrator (Observer)</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              </div>
-            )}
+              ) : (
+                // Waiting for instructor
+                <div className="w-full h-full flex items-center justify-center bg-gray-900">
+                  <div className="text-center text-gray-400">
+                    <Users size={64} className="mx-auto mb-4 opacity-50" />
+                    <p className="text-xl">Waiting for instructor to join...</p>
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Student's own video - small in bottom right corner */}
             <div className="absolute bottom-6 right-6 w-64 h-44 md:w-72 md:h-52 bg-gray-800 rounded-xl overflow-hidden border-2 border-gray-600 shadow-2xl z-20">

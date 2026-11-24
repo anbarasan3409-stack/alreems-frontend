@@ -91,11 +91,16 @@ export default function StudentSessionPage() {
   const channelName = session.channelName || session.channel_name || session.ChannelName;
 
 
+  const teacherName = session.teacher?.name || session.Teacher?.Name || session.teacher_name || session.TeacherName || '';
+  const teacherId = session.teacher_id || session.TeacherID || session.teacher?.id;
+
   return (
     <AgoraVideoSession 
       sessionId={sessionId}
       channelName={channelName}
       userRole="audience"
+      teacherName={teacherName}
+      teacherId={teacherId}
       onLeave={handleLeaveSession}
       sessionTitle={session.title || session.Title}
       studentId={user?.id || user?.ID}
