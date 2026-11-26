@@ -89,11 +89,13 @@ const Dashboard = () => {
         }
 
         if (sessions && Array.isArray(sessions)) {
-          const enrolledSessions = sessions.filter(s => {
-            const cid = s.course_id ?? s.courseId ?? s.CourseID;
-            return cid != null && enrolledCourseIds.has(Number(cid));
-          });
-          setUpcomingSessions(enrolledSessions.slice(0, 3)); // show top 3 upcoming sessions
+          const enrolledSessions = sessions
+            .filter(s => {
+              const cid = s.course_id ?? s.courseId ?? s.CourseID;
+              return cid != null && enrolledCourseIds.has(Number(cid));
+            })
+            .sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
+          setUpcomingSessions(enrolledSessions);
         } else {
           setUpcomingSessions([]);
         }
@@ -140,7 +142,7 @@ const Dashboard = () => {
     // Use enrolled courses instead of hardcoded data
     const recentCourses = enrolledCourses.slice(0, 4); // Show only first 4 courses
 
-    const formattedUpcomingEvents = upcomingSessions.map(session => ({
+    const formattedUpcomingEvents = upcomingSessions.slice(0, 3).map(session => ({
       id: session.id,
       type: 'live',
       title: session.title,
@@ -245,21 +247,21 @@ const Dashboard = () => {
 
         {/* Main Content Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Courses Section */}
+          {/* Upcoming Scheduled Classes Section */}
           <div className="lg:col-span-2">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-gray-900">Continue Learning</h2>
+              <h2 className="text-2xl font-bold text-gray-900">Upcoming Scheduled Classes</h2>
               <button 
-                onClick={() => setActiveView('courses')}
+                onClick={() => setActiveView('schedule')}
                 className="text-indigo-600 hover:text-indigo-700 font-medium text-sm flex items-center gap-1"
               >
-                View All Courses <ChevronRight size={16} />
+                View Schedule <ChevronRight size={16} />
               </button>
             </div>
             
             {coursesLoading ? (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {[1, 2, 3, 4].map(i => (
+                {[1, 2].map(i => (
                   <div key={i} className="bg-white rounded-2xl p-6 border border-gray-100 animate-pulse">
                     <div className="flex items-start gap-4 mb-4">
                       <div className="w-12 h-12 bg-gray-200 rounded-xl"></div>
@@ -268,19 +270,16 @@ const Dashboard = () => {
                         <div className="h-3 bg-gray-200 rounded w-3/4"></div>
                       </div>
                     </div>
-                    <div className="space-y-4">
-                      <div className="h-2 bg-gray-200 rounded"></div>
-                      <div className="h-8 bg-gray-200 rounded-xl"></div>
-                    </div>
+                    <div className="h-4 bg-gray-200 rounded w-1/2"></div>
                   </div>
                 ))}
               </div>
             ) : coursesError ? (
               <div className="bg-white rounded-2xl p-8 border border-gray-100 text-center">
                 <div className="text-red-500 mb-2">
-                  <BookOpen size={48} className="mx-auto mb-4" />
+                  <Calendar size={48} className="mx-auto mb-4" />
                 </div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Failed to Load Courses</h3>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Failed to Load Classes</h3>
                 <p className="text-gray-500 mb-4">{coursesError}</p>
                 <button 
                   onClick={() => window.location.reload()}
@@ -289,13 +288,13 @@ const Dashboard = () => {
                   Try Again
                 </button>
               </div>
-            ) : recentCourses.length === 0 ? (
+            ) : upcomingSessions.length === 0 ? (
               <div className="bg-white rounded-2xl p-8 border border-gray-100 text-center">
                 <div className="text-gray-400 mb-4">
-                  <BookOpen size={48} className="mx-auto mb-4" />
+                  <Calendar size={48} className="mx-auto mb-4" />
                 </div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">No Enrolled Courses Yet</h3>
-                <p className="text-gray-500 mb-4">Start your learning journey by enrolling in a course</p>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">No Upcoming Scheduled Classes</h3>
+                <p className="text-gray-500 mb-4">You have no upcoming scheduled classes for your enrolled courses</p>
                 <button 
                   onClick={() => setActiveView('courses')}
                   className="bg-indigo-600 text-white px-6 py-3 rounded-xl font-medium hover:bg-indigo-700 transition-all duration-200"
@@ -305,8 +304,43 @@ const Dashboard = () => {
               </div>
             ) : (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {recentCourses.map(course => (
-                  <CourseCard key={course.id} course={course} />
+                {upcomingSessions.slice(0, 6).map(session => (
+                  <div
+                    key={session.id}
+                    onClick={() => setActiveView('schedule')}
+                    className="bg-white rounded-2xl p-6 border border-gray-100 hover:shadow-lg transition-all duration-300 cursor-pointer group"
+                  >
+                    <div className="flex items-start gap-4 mb-4">
+                      <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
+                        <Video size={20} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <span className="text-xs font-medium text-emerald-700 bg-emerald-50 px-2 py-1 rounded-lg">
+                          {session.course_name || 'Scheduled Class'}
+                        </span>
+                        <h3 className="font-semibold text-gray-900 mt-2 mb-1 truncate">{session.title}</h3>
+                        {session.teacher_name && (
+                          <p className="text-sm text-gray-500">with {session.teacher_name}</p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-3 border-t border-gray-100 text-sm text-gray-600">
+                      <span className="flex items-center gap-1.5">
+                        <Clock size={14} className="text-gray-400" />
+                        {new Date(session.start_time).toLocaleString(undefined, {
+                          weekday: 'short',
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </span>
+                      <span className="text-indigo-600 font-medium text-xs flex items-center gap-0.5">
+                        Open Schedule <ChevronRight size={14} />
+                      </span>
+                    </div>
+                  </div>
                 ))}
               </div>
             )}
