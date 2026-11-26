@@ -2,7 +2,7 @@
 import { 
   BookOpen, Search, Clock, Users, Star, TrendingUp, Award, 
   ChevronRight, Bell, Calendar, Target, Zap, Filter, Grid, List,
-  BarChart3, Video, MessageCircle, Settings, User, Home, Menu
+  BarChart3, Video, MessageCircle, Settings, User, Home, Menu, Play
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
@@ -15,6 +15,7 @@ import Schedule from '../../components/Schedule';
 import Progress from '../../components/Progress';
 import Achievements from '../../components/Achievements';
 import Feedback from '../../components/Feedback';
+import LiveSession from '../../components/LiveSession';
 import { studentService, sessionService } from '@/services/apiService';
 import { useStudentAnalytics } from '@/hooks/useStudentAPI';
 import { useStudyTracker } from '@/hooks/useStudyTracker';
@@ -24,6 +25,7 @@ const Dashboard = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [enrolledCourses, setEnrolledCourses] = useState([]);
   const [upcomingSessions, setUpcomingSessions] = useState([]);
+  const [activeSessionId, setActiveSessionId] = useState(null);
   const [coursesLoading, setCoursesLoading] = useState(true);
   const [coursesError, setCoursesError] = useState(null);
   
@@ -59,9 +61,10 @@ const Dashboard = () => {
         setCoursesLoading(true);
         setCoursesError(null);
         
-        // Fetch courses and sessions in parallel
-        const [courses, sessions] = await Promise.all([
+        // Fetch enrolled courses and sessions (live + upcoming) in parallel
+        const [courses, liveSessionsData, upcomingSessionsData] = await Promise.all([
           studentService.getEnrolledCourses(user.ID),
+          sessionService.getLiveSessions(user.ID),
           sessionService.getUpcomingSessions(user.ID)
         ]);
         
@@ -88,17 +91,18 @@ const Dashboard = () => {
           setEnrolledCourses([]);
         }
 
-        if (sessions && Array.isArray(sessions)) {
-          const enrolledSessions = sessions
-            .filter(s => {
-              const cid = s.course_id ?? s.courseId ?? s.CourseID;
-              return cid != null && enrolledCourseIds.has(Number(cid));
-            })
-            .sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
-          setUpcomingSessions(enrolledSessions);
-        } else {
-          setUpcomingSessions([]);
-        }
+        const liveList = (Array.isArray(liveSessionsData) ? liveSessionsData : []).map(s => ({ ...s, _isLive: true }));
+        const upcomingList = (Array.isArray(upcomingSessionsData) ? upcomingSessionsData : []).map(s => ({ ...s, _isLive: false }));
+        const combinedSessions = [...liveList, ...upcomingList]
+          .filter(s => {
+            const cid = s.course_id ?? s.courseId ?? s.CourseID;
+            return cid != null && enrolledCourseIds.has(Number(cid));
+          })
+          .sort((a, b) => {
+            if (a._isLive !== b._isLive) return a._isLive ? -1 : 1;
+            return new Date(a.start_time) - new Date(b.start_time);
+          });
+        setUpcomingSessions(combinedSessions);
       } catch (error) {
         console.error('Failed to fetch enrolled courses:', error);
         setCoursesError('Failed to load enrolled courses');
@@ -304,44 +308,78 @@ const Dashboard = () => {
               </div>
             ) : (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {upcomingSessions.slice(0, 6).map(session => (
-                  <div
-                    key={session.id}
-                    onClick={() => setActiveView('schedule')}
-                    className="bg-white rounded-2xl p-6 border border-gray-100 hover:shadow-lg transition-all duration-300 cursor-pointer group"
-                  >
-                    <div className="flex items-start gap-4 mb-4">
-                      <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
-                        <Video size={20} />
+                {upcomingSessions.slice(0, 6).map(session => {
+                  const now = new Date();
+                  const start = new Date(session.start_time);
+                  const end = new Date(session.end_time);
+                  const isLive = session._isLive || (session.status === 'active' && now >= start && now <= end);
+
+                  return (
+                    <div
+                      key={session.id}
+                      onClick={() => !isLive && setActiveView('schedule')}
+                      className={`bg-white rounded-2xl p-6 border transition-all duration-300 group ${
+                        isLive
+                          ? 'border-red-200 ring-2 ring-red-100 hover:shadow-lg'
+                          : 'border-gray-100 hover:shadow-lg cursor-pointer'
+                      }`}
+                    >
+                      <div className="flex items-start gap-4 mb-4">
+                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300 ${
+                          isLive ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-600'
+                        }`}>
+                          <Video size={20} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {isLive && (
+                              <span className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 bg-red-100 px-2 py-0.5 rounded-lg uppercase">
+                                <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span>
+                                Live
+                              </span>
+                            )}
+                            <span className="text-xs font-medium text-emerald-700 bg-emerald-50 px-2 py-1 rounded-lg">
+                              {session.course_name || 'Scheduled Class'}
+                            </span>
+                          </div>
+                          <h3 className="font-semibold text-gray-900 mt-2 mb-1 truncate">{session.title}</h3>
+                          {session.teacher_name && (
+                            <p className="text-sm text-gray-500">with {session.teacher_name}</p>
+                          )}
+                        </div>
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <span className="text-xs font-medium text-emerald-700 bg-emerald-50 px-2 py-1 rounded-lg">
-                          {session.course_name || 'Scheduled Class'}
+
+                      <div className="flex items-center justify-between pt-3 border-t border-gray-100 text-sm text-gray-600">
+                        <span className="flex items-center gap-1.5">
+                          <Clock size={14} className="text-gray-400" />
+                          {start.toLocaleString(undefined, {
+                            weekday: 'short',
+                            month: 'short',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
                         </span>
-                        <h3 className="font-semibold text-gray-900 mt-2 mb-1 truncate">{session.title}</h3>
-                        {session.teacher_name && (
-                          <p className="text-sm text-gray-500">with {session.teacher_name}</p>
+                        {isLive ? (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActiveSessionId(session.id || session.ID);
+                            }}
+                            className="bg-gradient-to-r from-red-600 to-pink-600 text-white px-4 py-1.5 rounded-xl text-xs font-semibold hover:shadow-md hover:scale-105 transition-all duration-200 flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <Play size={12} />
+                            Join Now
+                          </button>
+                        ) : (
+                          <span className="text-indigo-600 font-medium text-xs flex items-center gap-0.5">
+                            Open Schedule <ChevronRight size={14} />
+                          </span>
                         )}
                       </div>
                     </div>
-
-                    <div className="flex items-center justify-between pt-3 border-t border-gray-100 text-sm text-gray-600">
-                      <span className="flex items-center gap-1.5">
-                        <Clock size={14} className="text-gray-400" />
-                        {new Date(session.start_time).toLocaleString(undefined, {
-                          weekday: 'short',
-                          month: 'short',
-                          day: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit',
-                        })}
-                      </span>
-                      <span className="text-indigo-600 font-medium text-xs flex items-center gap-0.5">
-                        Open Schedule <ChevronRight size={14} />
-                      </span>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -428,6 +466,13 @@ const Dashboard = () => {
           profileData={profileStatus.profile}
           missingFields={profileStatus.missingFields}
           completionPercentage={profileStatus.completionPercentage}
+        />
+      )}
+      {/* Live Session Modal */}
+      {activeSessionId && (
+        <LiveSession 
+          sessionId={activeSessionId} 
+          onLeave={() => setActiveSessionId(null)}
         />
       )}
     </div>
