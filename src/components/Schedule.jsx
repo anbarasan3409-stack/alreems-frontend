@@ -17,6 +17,7 @@ import LiveSession from './LiveSession.jsx';
 
 const Schedule = () => {
   const { profile, loading: profileLoading } = useStudentProfile();
+  const studentId = profile?.ID || profile?.id;
   const { 
     sessions,
     liveSessions, 
@@ -25,7 +26,7 @@ const Schedule = () => {
     error: sessionsError,
     joinLiveSession,
     checkSessionJoinable 
-  } = useSessions();
+  } = useSessions(studentId);
   const { joinSession } = useSessionStreaming();
 
   const [currentDate, setCurrentDate] = useState(new Date());

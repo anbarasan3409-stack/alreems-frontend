@@ -251,58 +251,86 @@ export const useCourses = () => {
   };
 };
 
-// Hook for sessions
-export const useSessions = () => {
+// Hook for sessions (filtered to student's enrolled courses when studentId is provided)
+export const useSessions = (studentId = null) => {
   const [sessions, setSessions] = useState([]);
   const [liveSessions, setLiveSessions] = useState([]);
   const [upcomingSessions, setUpcomingSessions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  const filterByEnrolledCourses = useCallback(async (sessionList) => {
+    if (!studentId || !Array.isArray(sessionList)) return [];
+    try {
+      const enrolled = await studentService.getEnrolledCourses(studentId);
+      const enrolledIds = new Set(
+        (Array.isArray(enrolled) ? enrolled : []).map((c) => Number(c.id || c.ID))
+      );
+      return sessionList.filter((s) => {
+        const cid = s.course_id ?? s.courseId ?? s.CourseID;
+        return cid != null && enrolledIds.has(Number(cid));
+      });
+    } catch {
+      return sessionList;
+    }
+  }, [studentId]);
+
   const fetchAllSessions = useCallback(async () => {
+    if (!studentId) {
+      setSessions([]);
+      return [];
+    }
     setLoading(true);
     setError(null);
     try {
-      const data = await sessionService.getAllSessions();
-      // Ensure we always have an array, even if API returns null
-      const sessions = Array.isArray(data) ? data : [];
-      setSessions(sessions);
-      return sessions;
+      const data = await sessionService.getAllSessions(studentId);
+      const raw = Array.isArray(data) ? data : [];
+      const filtered = await filterByEnrolledCourses(raw);
+      setSessions(filtered);
+      return filtered;
     } catch (err) {
       setError(err.error || 'Failed to fetch sessions');
       throw err;
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [studentId, filterByEnrolledCourses]);
 
   const fetchLiveSessions = useCallback(async () => {
+    if (!studentId) {
+      setLiveSessions([]);
+      return [];
+    }
     setError(null);
     try {
-      const data = await sessionService.getLiveSessions();
-      // Ensure we always have an array, even if API returns null
-      const sessions = Array.isArray(data) ? data : [];
-      setLiveSessions(sessions);
-      return sessions;
+      const data = await sessionService.getLiveSessions(studentId);
+      const raw = Array.isArray(data) ? data : [];
+      const filtered = await filterByEnrolledCourses(raw);
+      setLiveSessions(filtered);
+      return filtered;
     } catch (err) {
       setError(err.error || 'Failed to fetch live sessions');
       throw err;
     }
-  }, []);
+  }, [studentId, filterByEnrolledCourses]);
 
   const fetchUpcomingSessions = useCallback(async () => {
+    if (!studentId) {
+      setUpcomingSessions([]);
+      return [];
+    }
     setError(null);
     try {
-      const data = await sessionService.getUpcomingSessions();
-      // Ensure we always have an array, even if API returns null
-      const sessions = Array.isArray(data) ? data : [];
-      setUpcomingSessions(sessions);
-      return sessions;
+      const data = await sessionService.getUpcomingSessions(studentId);
+      const raw = Array.isArray(data) ? data : [];
+      const filtered = await filterByEnrolledCourses(raw);
+      setUpcomingSessions(filtered);
+      return filtered;
     } catch (err) {
       setError(err.error || 'Failed to fetch upcoming sessions');
       throw err;
     }
-  }, []);
+  }, [studentId, filterByEnrolledCourses]);
 
   const joinLiveSession = useCallback(async (sessionId, studentId) => {
     setError(null);

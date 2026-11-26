@@ -62,21 +62,26 @@ const Dashboard = () => {
         // Fetch courses and sessions in parallel
         const [courses, sessions] = await Promise.all([
           studentService.getEnrolledCourses(user.ID),
-          sessionService.getUpcomingSessions()
+          sessionService.getUpcomingSessions(user.ID)
         ]);
         
+        const enrolledCourseIds = new Set();
         if (courses && Array.isArray(courses)) {
           // Transform the data to match the expected format for CourseCard
-          const transformedCourses = courses.map(course => ({
-            id: course.id || course.ID,
-            title: course.name || course.title,
-            progress: course.progress || 0,
-            nextLesson: course.next_lesson || 'Start Course',
-            instructor: course.teacher_name || course.instructor || 'Instructor',
-            thumbnail: course.thumbnail || 'bg-gradient-to-br from-secondary to-secondary/50',
-            timeLeft: course.time_left || 'N/A',
-            category: course.category || course.subject || 'General'
-          }));
+          const transformedCourses = courses.map(course => {
+            const cid = course.id || course.ID;
+            if (cid != null) enrolledCourseIds.add(Number(cid));
+            return {
+              id: cid,
+              title: course.name || course.title,
+              progress: course.progress || 0,
+              nextLesson: course.next_lesson || 'Start Course',
+              instructor: course.teacher_name || course.instructor || 'Instructor',
+              thumbnail: course.thumbnail || 'bg-gradient-to-br from-secondary to-secondary/50',
+              timeLeft: course.time_left || 'N/A',
+              category: course.category || course.subject || 'General'
+            };
+          });
           
           setEnrolledCourses(transformedCourses);
         } else {
@@ -84,7 +89,11 @@ const Dashboard = () => {
         }
 
         if (sessions && Array.isArray(sessions)) {
-          setUpcomingSessions(sessions.slice(0, 3)); // show top 3 upcoming sessions
+          const enrolledSessions = sessions.filter(s => {
+            const cid = s.course_id ?? s.courseId ?? s.CourseID;
+            return cid != null && enrolledCourseIds.has(Number(cid));
+          });
+          setUpcomingSessions(enrolledSessions.slice(0, 3)); // show top 3 upcoming sessions
         } else {
           setUpcomingSessions([]);
         }
