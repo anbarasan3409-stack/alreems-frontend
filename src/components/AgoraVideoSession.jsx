@@ -100,6 +100,8 @@ const AgoraVideoSession = ({
   const [chatMessages, setChatMessages] = useState([]);
   const [chatInput, setChatInput] = useState('');
   const [unreadChatCount, setUnreadChatCount] = useState(0);
+  const [chatToast, setChatToast] = useState(null);
+  const chatToastTimerRef = useRef(null);
   const showChatRef = useRef(false);
   showChatRef.current = showChat;
 
@@ -123,7 +125,7 @@ const AgoraVideoSession = ({
         videoElement.autoplay = true;
         videoElement.playsInline = true;
 
-        const playPromise = localVideoTrack.play(videoElement);
+        const playPromise = localVideoTrack.play(videoElement, { mirror: !isScreenSharingRef.current });
 
         playPromise.then(() => {
 
@@ -160,7 +162,7 @@ const AgoraVideoSession = ({
             videoElement.autoplay = true;
             videoElement.playsInline = true;
             
-            await localVideoTrack.play(videoElement);
+            await localVideoTrack.play(videoElement, { mirror: !isScreenSharingRef.current });
 
             setVideoReady(true);
           }
@@ -191,7 +193,7 @@ const AgoraVideoSession = ({
 
 
         // Always try to play, regardless of paused state
-        const playPromise = localVideoTrack.play(videoElement);
+        const playPromise = localVideoTrack.play(videoElement, { mirror: !isScreenSharingRef.current });
 
         playPromise.then(() => {
 
@@ -447,6 +449,13 @@ const AgoraVideoSession = ({
             if (!showChatRef.current) {
               setUnreadChatCount(c => c + 1);
             }
+            setChatToast({
+              senderName: msg.senderName || 'Participant',
+              senderRole: msg.senderRole || 'student',
+              text: String(msg.text)
+            });
+            if (chatToastTimerRef.current) clearTimeout(chatToastTimerRef.current);
+            chatToastTimerRef.current = setTimeout(() => setChatToast(null), 4000);
           } else if (msg.type === 'screen_share_toggle') {
             const enabled = Boolean(msg.enabled);
             setGlobalScreenShareAllowed(enabled);
@@ -497,7 +506,12 @@ const AgoraVideoSession = ({
                   } else {
                     const AgoraRTCModule = await import('agora-rtc-sdk-ng');
                     const AgoraRTC = AgoraRTCModule.default;
-                    const audioTrack = await AgoraRTC.createMicrophoneAudioTrack({ encoderConfig: "music_standard" });
+                    const audioTrack = await AgoraRTC.createMicrophoneAudioTrack({
+                      encoderConfig: "speech_standard",
+                      AEC: true,
+                      ANS: true,
+                      AGC: true,
+                    });
                     setLocalAudioTrack(audioTrack);
                     localAudioTrackRef.current = audioTrack;
                     const currentClient = agoraClient || clientRef.current;
@@ -698,13 +712,21 @@ Your App ID (${appId}) is configured correctly. The issue is that App Certificat
             }
           }),
           AgoraRTC.createMicrophoneAudioTrack({
-            encoderConfig: "music_standard",
+            encoderConfig: "speech_standard",
+            AEC: true,
+            ANS: true,
+            AGC: true,
           })
         ]);
       } catch (bothErr) {
         // Fallback: try audio and video separately so one missing device doesn't block the other
         try {
-          audioTrack = await AgoraRTC.createMicrophoneAudioTrack({ encoderConfig: "music_standard" });
+          audioTrack = await AgoraRTC.createMicrophoneAudioTrack({
+            encoderConfig: "speech_standard",
+            AEC: true,
+            ANS: true,
+            AGC: true,
+          });
         } catch (aErr) {
           console.warn('Microphone access failed:', aErr);
         }
@@ -788,16 +810,14 @@ Your App ID (${appId}) is configured correctly. The issue is that App Certificat
         setTimeout(() => {
           const videoContainer = document.getElementById(`remote-video-${user.uid}`);
           if (videoContainer) {
-
-            user.videoTrack.play(videoContainer);
+            user.videoTrack.play(videoContainer, { mirror: false });
           } else {
             console.warn('Video container not found for user:', user.uid);
             // Retry after another short delay
             setTimeout(() => {
               const retryContainer = document.getElementById(`remote-video-${user.uid}`);
               if (retryContainer) {
-
-                user.videoTrack.play(retryContainer);
+                user.videoTrack.play(retryContainer, { mirror: false });
               }
             }, 500);
           }
@@ -931,7 +951,10 @@ Your App ID (${appId}) is configured correctly. The issue is that App Certificat
         const AgoraRTCModule = await import('agora-rtc-sdk-ng');
         const AgoraRTC = AgoraRTCModule.default;
         const audioTrack = await AgoraRTC.createMicrophoneAudioTrack({
-          encoderConfig: "music_standard",
+          encoderConfig: "speech_standard",
+          AEC: true,
+          ANS: true,
+          AGC: true,
         });
         setLocalAudioTrack(audioTrack);
         localAudioTrackRef.current = audioTrack;
@@ -973,7 +996,7 @@ Your App ID (${appId}) is configured correctly. The issue is that App Certificat
       await currentClient.publish(screenTrack);
       screenTrackRef.current = screenTrack;
       if (localVideoRef.current) {
-        screenTrack.play(localVideoRef.current);
+        screenTrack.play(localVideoRef.current, { mirror: false });
       }
 
       setLocalVideoTrack(screenTrack);
@@ -1507,6 +1530,26 @@ Your App ID (${appId}) is configured correctly. The issue is that App Certificat
           </button>
         </div>
       </div>
+
+      {/* Bottom Chat Toast */}
+      {chatToast && !showChat && (
+        <div
+          onClick={() => {
+            setShowChat(true);
+            setUnreadChatCount(0);
+            setChatToast(null);
+          }}
+          className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 max-w-sm w-[90%] bg-gray-900/95 border border-blue-500/40 text-white px-4 py-2.5 rounded-xl shadow-2xl flex items-center gap-3 cursor-pointer hover:bg-gray-800 transition-colors"
+        >
+          <MessageSquare size={18} className="text-blue-400 flex-shrink-0" />
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-semibold text-blue-300 truncate">
+              {chatToast.senderName}{chatToast.senderRole === 'teacher' ? ' (Instructor)' : ''}
+            </p>
+            <p className="text-sm text-gray-100 truncate">{chatToast.text}</p>
+          </div>
+        </div>
+      )}
 
       {/* In-Call Chat Drawer */}
       {showChat && (

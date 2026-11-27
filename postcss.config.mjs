@@ -83,8 +83,8 @@ function convertLegacyColors(value) {
     }
   );
 
-  // 3. Strip "in oklab" / "in oklch" from gradients so older Chrome/Safari render them
-  out = out.replace(/\s+in\s+(?:oklab|oklch)(?=\s*,)/gi, '');
+  // 3. Strip "in oklab" / "in oklch" from gradients and --tw-gradient-position so older Chrome/Safari render them
+  out = out.replace(/\s+in\s+(?:oklab|oklch)(?:\s+(?:shorter|longer|increasing|decreasing)\s+hue)?(?=\s*,|\s*$|\s*\))/gi, '');
 
   return out;
 }
