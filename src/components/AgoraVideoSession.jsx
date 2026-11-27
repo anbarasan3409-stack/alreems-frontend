@@ -11,6 +11,7 @@ import {
   VolumeX,
   PenTool,
   MessageSquare,
+  Monitor,
   Send,
   X
 } from 'lucide-react';
@@ -101,6 +102,14 @@ const AgoraVideoSession = ({
   const [unreadChatCount, setUnreadChatCount] = useState(0);
   const showChatRef = useRef(false);
   showChatRef.current = showChat;
+
+  // Screen share permissions (controlled by teacher overall & per-student)
+  const [globalScreenShareAllowed, setGlobalScreenShareAllowed] = useState(true);
+  const [personalScreenShareAllowed, setPersonalScreenShareAllowed] = useState(true);
+  const canScreenShare = globalScreenShareAllowed && personalScreenShareAllowed;
+  const isScreenSharingRef = useRef(false);
+  isScreenSharingRef.current = isScreenSharing;
+  const stopScreenShareRef = useRef(null);
   
   // Force video playback on user interaction
   const forceVideoPlayback = async () => {
@@ -438,6 +447,18 @@ const AgoraVideoSession = ({
             if (!showChatRef.current) {
               setUnreadChatCount(c => c + 1);
             }
+          } else if (msg.type === 'screen_share_toggle') {
+            const enabled = Boolean(msg.enabled);
+            setGlobalScreenShareAllowed(enabled);
+            if (!enabled && isScreenSharingRef.current) {
+              stopScreenShareRef.current?.();
+            }
+            setControlNotice(
+              enabled
+                ? 'Screen sharing has been enabled by the instructor.'
+                : 'Screen sharing has been disabled by the instructor.'
+            );
+            setTimeout(() => setControlNotice(null), 4000);
           } else if (msg.type === 'teacher_control') {
             const myUid = clientRef.current?.uid || uid;
             const matchesMe = 
@@ -524,6 +545,17 @@ const AgoraVideoSession = ({
                   setControlNotice('Instructor asked to turn on camera. Please allow camera access and tap Camera.');
                   setTimeout(() => setControlNotice(null), 5000);
                 }
+              } else if (msg.action === 'disable_screen_share') {
+                setPersonalScreenShareAllowed(false);
+                if (isScreenSharingRef.current) {
+                  stopScreenShareRef.current?.();
+                }
+                setControlNotice('Your screen sharing was disabled by the instructor.');
+                setTimeout(() => setControlNotice(null), 4500);
+              } else if (msg.action === 'enable_screen_share') {
+                setPersonalScreenShareAllowed(true);
+                setControlNotice('Your screen sharing was enabled by the instructor.');
+                setTimeout(() => setControlNotice(null), 4500);
               }
             }
           }
@@ -918,6 +950,11 @@ Your App ID (${appId}) is configured correctly. The issue is that App Certificat
   };
 
   const startScreenShare = async () => {
+    if (!canScreenShare) {
+      setControlNotice('Screen sharing is currently disabled by the instructor.');
+      setTimeout(() => setControlNotice(null), 4000);
+      return;
+    }
     try {
       const AgoraRTCModule = await import('agora-rtc-sdk-ng');
       const AgoraRTC = AgoraRTCModule.default;
@@ -988,6 +1025,7 @@ Your App ID (${appId}) is configured correctly. The issue is that App Certificat
       setIsScreenSharing(false);
     }
   };
+  stopScreenShareRef.current = stopScreenShare;
 
   const sendChatMessage = async (e) => {
     e?.preventDefault();
@@ -1396,6 +1434,28 @@ Your App ID (${appId}) is configured correctly. The issue is that App Certificat
             ) : (
               <VideoOff size={20} className="text-white" />
             )}
+          </button>
+
+          {/* Screen Share Control for Student */}
+          <button
+            onClick={isScreenSharing ? stopScreenShare : startScreenShare}
+            disabled={!canScreenShare && !isScreenSharing}
+            className={`p-3 rounded-full transition-colors ${
+              isScreenSharing
+                ? 'bg-green-600 hover:bg-green-700'
+                : !canScreenShare
+                  ? 'bg-gray-700 opacity-50 cursor-not-allowed'
+                  : 'bg-gray-600 hover:bg-gray-500'
+            }`}
+            title={
+              isScreenSharing
+                ? 'Stop sharing screen'
+                : !canScreenShare
+                  ? 'Screen sharing disabled by instructor'
+                  : 'Share screen'
+            }
+          >
+            <Monitor size={20} className="text-white" />
           </button>
 
           {/* Whiteboard Control for Student */}
