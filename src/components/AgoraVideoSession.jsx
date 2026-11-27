@@ -9,7 +9,10 @@ import {
   Settings,
   Volume2,
   VolumeX,
-  PenTool
+  PenTool,
+  MessageSquare,
+  Send,
+  X
 } from 'lucide-react';
 import { COLORS } from '@/theme/themeConstants';
 import dynamic from 'next/dynamic';
@@ -89,6 +92,15 @@ const AgoraVideoSession = ({
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [volume, setVolume] = useState(50);
   const [videoReady, setVideoReady] = useState(false);
+
+  // Chat states
+  const [showChat, setShowChat] = useState(false);
+  const [chatEnabled, setChatEnabled] = useState(true);
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatInput, setChatInput] = useState('');
+  const [unreadChatCount, setUnreadChatCount] = useState(0);
+  const showChatRef = useRef(false);
+  showChatRef.current = showChat;
   
   // Force video playback on user interaction
   const forceVideoPlayback = async () => {
@@ -401,6 +413,30 @@ const AgoraVideoSession = ({
               if (msg.role === 'teacher' && msg.name) {
                 setResolvedTeacherName(msg.name);
               }
+            }
+          } else if (msg.type === 'chat_toggle') {
+            const enabled = Boolean(msg.enabled);
+            setChatEnabled(enabled);
+            setControlNotice(
+              enabled
+                ? 'Class chat has been enabled by the instructor.'
+                : 'Class chat has been disabled by the instructor.'
+            );
+            setTimeout(() => setControlNotice(null), 3500);
+          } else if (msg.type === 'chat_msg' && msg.text) {
+            setChatMessages(prev => [
+              ...prev.slice(-199),
+              {
+                id: msg.id || `${senderUid}-${Date.now()}`,
+                senderName: msg.senderName || 'Participant',
+                senderRole: msg.senderRole || 'student',
+                text: String(msg.text),
+                timestamp: msg.timestamp || Date.now(),
+                isSelf: false
+              }
+            ]);
+            if (!showChatRef.current) {
+              setUnreadChatCount(c => c + 1);
             }
           } else if (msg.type === 'teacher_control') {
             const myUid = clientRef.current?.uid || uid;
@@ -953,6 +989,33 @@ Your App ID (${appId}) is configured correctly. The issue is that App Certificat
     }
   };
 
+  const sendChatMessage = async (e) => {
+    e?.preventDefault();
+    if (!chatEnabled) return;
+    const trimmed = chatInput.trim();
+    if (!trimmed) return;
+
+    const msgObj = {
+      type: 'chat_msg',
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      senderName: studentName || 'Student',
+      senderRole: 'student',
+      text: trimmed,
+      timestamp: Date.now()
+    };
+
+    setChatMessages(prev => [...prev.slice(-199), { ...msgObj, isSelf: true }]);
+    setChatInput('');
+    try {
+      const current = client || clientRef.current;
+      if (current) {
+        await current.sendStreamMessage(JSON.stringify(msgObj));
+      }
+    } catch (err) {
+      console.warn('Failed to send chat message:', err);
+    }
+  };
+
   const leaveSession = async () => {
     try {
       // Clean up local tracks
@@ -1351,6 +1414,30 @@ Your App ID (${appId}) is configured correctly. The issue is that App Certificat
             )}
           </button>
 
+          {/* Chat Control */}
+          <button
+            onClick={() => {
+              setShowChat(prev => {
+                const next = !prev;
+                if (next) setUnreadChatCount(0);
+                return next;
+              });
+            }}
+            className={`p-3 rounded-full transition-colors relative ${
+              showChat
+                ? 'bg-blue-600 hover:bg-blue-700'
+                : 'bg-gray-600 hover:bg-gray-500'
+            }`}
+            title={showChat ? 'Hide chat' : 'Open chat'}
+          >
+            <MessageSquare size={20} className="text-white" />
+            {unreadChatCount > 0 && !showChat && (
+              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
+                {unreadChatCount > 9 ? '9+' : unreadChatCount}
+              </span>
+            )}
+          </button>
+
           {/* Settings */}
           <button 
             className="p-3 rounded-full bg-gray-600 hover:bg-gray-500 transition-colors"
@@ -1360,6 +1447,85 @@ Your App ID (${appId}) is configured correctly. The issue is that App Certificat
           </button>
         </div>
       </div>
+
+      {/* In-Call Chat Drawer */}
+      {showChat && (
+        <div className="fixed bottom-20 right-4 sm:right-6 w-80 sm:w-96 h-[400px] bg-gray-800 border border-gray-700 rounded-2xl shadow-2xl z-40 flex flex-col overflow-hidden">
+          <div className="px-4 py-3 bg-gray-900 border-b border-gray-700 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <MessageSquare size={18} className="text-blue-400" />
+              <h3 className="text-white font-semibold text-sm">Class Chat</h3>
+              {!chatEnabled && (
+                <span className="text-[10px] bg-red-500/20 text-red-300 border border-red-500/40 px-2 py-0.5 rounded-full">
+                  Disabled
+                </span>
+              )}
+            </div>
+            <button
+              onClick={() => setShowChat(false)}
+              className="text-gray-400 hover:text-white p-1 rounded"
+            >
+              <X size={16} />
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-3 space-y-2.5">
+            {chatMessages.length === 0 ? (
+              <div className="text-center text-gray-500 text-xs py-12">
+                {chatEnabled
+                  ? 'No messages yet. Ask a question!'
+                  : 'Chat is currently disabled by the instructor.'}
+              </div>
+            ) : (
+              chatMessages.map(m => (
+                <div
+                  key={m.id}
+                  className={`flex flex-col ${m.isSelf ? 'items-end' : 'items-start'}`}
+                >
+                  <span className="text-[11px] text-gray-400 mb-0.5 px-1">
+                    {m.isSelf ? 'You' : m.senderName}
+                    {m.senderRole === 'teacher' && !m.isSelf ? ' (Instructor)' : ''}
+                  </span>
+                  <div
+                    className={`max-w-[85%] rounded-xl px-3 py-2 text-sm break-words ${
+                      m.isSelf
+                        ? 'bg-blue-600 text-white'
+                        : m.senderRole === 'teacher'
+                          ? 'bg-purple-600/80 text-white'
+                          : 'bg-gray-700 text-gray-100'
+                    }`}
+                  >
+                    {m.text}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {chatEnabled ? (
+            <form onSubmit={sendChatMessage} className="p-3 bg-gray-900 border-t border-gray-700 flex items-center gap-2">
+              <input
+                type="text"
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                placeholder="Type a message..."
+                className="flex-1 bg-gray-800 text-white text-sm rounded-xl px-3 py-2 border border-gray-700 focus:outline-none focus:border-blue-500"
+              />
+              <button
+                type="submit"
+                disabled={!chatInput.trim()}
+                className="p-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white rounded-xl transition-colors"
+              >
+                <Send size={16} />
+              </button>
+            </form>
+          ) : (
+            <div className="p-3 bg-gray-900 border-t border-gray-700 text-center text-xs text-gray-400">
+              Chat is disabled by the instructor
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };
