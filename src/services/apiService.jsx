@@ -419,6 +419,36 @@ const isSessionActiveOrScheduled = (status) => {
   return s === 'active' || s === 'scheduled' || s === 'ongoing' || s === 'live';
 };
 
+export const isSessionCurrentlyLive = (session, now = new Date()) => {
+  if (!session) return false;
+  const s = String(session.status || session.Status || '').toLowerCase();
+  if (s === 'completed' || s === 'cancelled') return false;
+
+  const startRaw = session.start_time || session.StartTime;
+  const endRaw = session.end_time || session.EndTime;
+  const startTime = startRaw ? new Date(startRaw) : null;
+  const endTime = endRaw ? new Date(endRaw) : null;
+
+  // If teacher/admin explicitly started the session, it is live immediately (even before scheduled startTime)
+  if (s === 'active' || s === 'ongoing' || s === 'live') {
+    if (endTime && !isNaN(endTime.getTime())) {
+      const graceEnd = new Date(endTime.getTime() + 60 * 60 * 1000); // 1 hour grace window
+      return now <= graceEnd;
+    }
+    return true;
+  }
+
+  // Otherwise, if still 'scheduled', it is live once within the scheduled window
+  if (s === 'scheduled' && startTime && !isNaN(startTime.getTime())) {
+    if (endTime && !isNaN(endTime.getTime())) {
+      return now >= startTime && now <= endTime;
+    }
+    return now >= startTime;
+  }
+
+  return false;
+};
+
 // Session Service (for students)
 export const sessionService = {
   // Get all sessions available to students (filtered by studentId if provided)
@@ -458,15 +488,8 @@ export const sessionService = {
       
       const now = new Date();
       
-      // Filter sessions that are currently live (started but not ended)
-      const liveSessions = allSessions.filter(session => {
-        const startTime = new Date(session.start_time);
-        const endTime = new Date(session.end_time);
-        
-        return isSessionActiveOrScheduled(session.status) && 
-               now >= startTime && 
-               now <= endTime;
-      });
+      // Filter sessions that are currently live (started explicitly or within scheduled window)
+      const liveSessions = allSessions.filter(session => isSessionCurrentlyLive(session, now));
       
       return liveSessions;
     } catch (error) {
@@ -485,9 +508,10 @@ export const sessionService = {
       
       const now = new Date();
       
-      // Filter sessions that are upcoming (haven't started yet)
+      // Filter sessions that are upcoming (haven't started yet and not already live)
       const upcomingSessions = allSessions.filter(session => {
-        const startTime = new Date(session.start_time);
+        if (isSessionCurrentlyLive(session, now)) return false;
+        const startTime = new Date(session.start_time || session.StartTime);
         
         return isSessionActiveOrScheduled(session.status) && 
                now < startTime;
@@ -562,21 +586,22 @@ export const sessionService = {
       );
       const session = handleApiResponse(sessionResponse);
 
-      // Check if session is currently live based on time
+      // Check if session is currently live (started early by teacher or within scheduled time)
       const now = new Date();
       const startTime = new Date(session.start_time);
       const endTime = new Date(session.end_time);
       
-      const isLive = isSessionActiveOrScheduled(session.status) && 
-                     now >= startTime && 
-                     now <= endTime;
+      const isLive = isSessionCurrentlyLive(session, now);
 
       if (!isLive) {
         let errorMsg = 'Session is not currently available';
-        if (now < startTime) {
-          errorMsg = 'Session has not started yet';
-        } else if (now > endTime) {
+        const statusLower = String(session.status || '').toLowerCase();
+        if (statusLower === 'completed' || now > endTime) {
           errorMsg = 'Session has ended';
+        } else if (statusLower === 'cancelled') {
+          errorMsg = 'Session has been cancelled';
+        } else if (now < startTime && statusLower === 'scheduled') {
+          errorMsg = 'Session has not started yet';
         } else if (!isSessionActiveOrScheduled(session.status)) {
           errorMsg = 'Session is not active';
         }
@@ -603,7 +628,7 @@ export const sessionService = {
     }
   },
 
-  // Check if session is joinable (currently live based on time)
+  // Check if session is joinable (currently live)
   isSessionJoinable: async (sessionId) => {
     try {
       const session = await sessionService.getSessionById(sessionId);
@@ -612,16 +637,17 @@ export const sessionService = {
       const startTime = new Date(session.start_time);
       const endTime = new Date(session.end_time);
       
-      const isLive = isSessionActiveOrScheduled(session.status) && 
-                     now >= startTime && 
-                     now <= endTime;
+      const isLive = isSessionCurrentlyLive(session, now);
       
       let reason = null;
       if (!isLive) {
-        if (now < startTime) {
-          reason = 'Session has not started yet';
-        } else if (now > endTime) {
+        const statusLower = String(session.status || '').toLowerCase();
+        if (statusLower === 'completed' || now > endTime) {
           reason = 'Session has ended';
+        } else if (statusLower === 'cancelled') {
+          reason = 'Session has been cancelled';
+        } else if (now < startTime && statusLower === 'scheduled') {
+          reason = 'Session has not started yet';
         } else if (!isSessionActiveOrScheduled(session.status)) {
           reason = 'Session is not active';
         }
