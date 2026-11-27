@@ -366,7 +366,8 @@ const Dashboard = () => {
                               e.stopPropagation();
                               setActiveSessionId(session.id || session.ID);
                             }}
-                            className="bg-gradient-to-r from-red-600 to-pink-600 text-white px-4 py-1.5 rounded-xl text-xs font-semibold hover:shadow-md hover:scale-105 transition-all duration-200 flex items-center gap-1.5 cursor-pointer"
+                            style={{ backgroundColor: '#dc2626' }}
+                            className="bg-red-600 bg-gradient-to-r from-red-600 to-pink-600 text-white px-4 py-1.5 rounded-xl text-xs font-semibold hover:shadow-md hover:scale-105 transition-all duration-200 flex items-center gap-1.5 cursor-pointer"
                           >
                             <Play size={12} />
                             Join Now

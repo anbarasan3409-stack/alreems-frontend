@@ -152,7 +152,8 @@ const Schedule = () => {
           {isLive ? (
             <button
               onClick={() => handleJoinSession(session.id || session.ID)}
-              className="bg-gradient-to-r from-red-600 to-pink-600 text-white px-6 py-3 rounded-xl text-sm hover:shadow-lg hover:scale-105 transition-all duration-200 flex items-center gap-2"
+              style={{ backgroundColor: '#dc2626' }}
+              className="bg-red-600 bg-gradient-to-r from-red-600 to-pink-600 text-white px-6 py-3 rounded-xl text-sm hover:shadow-lg hover:scale-105 transition-all duration-200 flex items-center gap-2"
             >
               <Play size={14} />
               Join Live
