@@ -371,6 +371,24 @@ const AgoraVideoSession = ({
                 });
               }
             }
+          } else if (msg.type === 'role_query' || msg.type === 'discover_roles') {
+            // Reply with student identity so late-joining teachers/admins see our real name
+            try {
+              const current = agoraClient || clientRef.current;
+              if (current) {
+                const myUid = current.uid || uid;
+                await current.sendStreamMessage(JSON.stringify({
+                  type: 'student_info',
+                  role: 'student',
+                  uid: myUid,
+                  studentId: studentId,
+                  name: studentName,
+                  email: studentEmail
+                }));
+              }
+            } catch (replyErr) {
+              console.warn('Failed to reply to role_query:', replyErr);
+            }
           } else if (msg.type === 'user_role') {
             if (msg.uid && msg.role) {
               setUserRoles(prev => {
