@@ -416,10 +416,13 @@ export const adminService = {
 
 // Session Service (for students)
 export const sessionService = {
-  // Get all sessions available to students
-  getAllSessions: async () => {
+  // Get all sessions available to students (filtered by studentId if provided)
+  getAllSessions: async (studentId = null) => {
     try {
-      const response = await axios.get(API_ENDPOINTS.SESSIONS.GET_ALL, API_CONFIG);
+      const config = studentId
+        ? { ...API_CONFIG, params: { student_id: studentId } }
+        : API_CONFIG;
+      const response = await axios.get(API_ENDPOINTS.SESSIONS.GET_ALL, config);
       return handleApiResponse(response);
     } catch (error) {
       return handleApiError(error);
@@ -440,9 +443,12 @@ export const sessionService = {
   },
 
   // Get live sessions (sessions that are currently happening based on time)
-  getLiveSessions: async () => {
+  getLiveSessions: async (studentId = null) => {
     try {
-      const response = await axios.get(API_ENDPOINTS.SESSIONS.GET_ALL, API_CONFIG);
+      const config = studentId
+        ? { ...API_CONFIG, params: { student_id: studentId } }
+        : API_CONFIG;
+      const response = await axios.get(API_ENDPOINTS.SESSIONS.GET_ALL, config);
       const allSessions = handleApiResponse(response);
       
       const now = new Date();
@@ -464,9 +470,12 @@ export const sessionService = {
   },
 
   // Get upcoming sessions (sessions that haven't started yet)
-  getUpcomingSessions: async () => {
+  getUpcomingSessions: async (studentId = null) => {
     try {
-      const response = await axios.get(API_ENDPOINTS.SESSIONS.GET_ALL, API_CONFIG);
+      const config = studentId
+        ? { ...API_CONFIG, params: { student_id: studentId } }
+        : API_CONFIG;
+      const response = await axios.get(API_ENDPOINTS.SESSIONS.GET_ALL, config);
       const allSessions = handleApiResponse(response);
       
       const now = new Date();

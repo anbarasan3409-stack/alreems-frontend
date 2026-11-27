@@ -13,9 +13,10 @@ import { useStudentProfile, useCourses, useEnrolledCourses, useSessions } from '
 
 const Overview = () => {
   const { profile, loading: profileLoading } = useStudentProfile();
+  const studentId = profile?.id || profile?.ID;
   const { courses, loading: coursesLoading } = useCourses();
-  const { enrolledCourses } = useEnrolledCourses(profile?.id);
-  const { liveSessions, upcomingSessions } = useSessions();
+  const { enrolledCourses } = useEnrolledCourses(studentId);
+  const { liveSessions, upcomingSessions } = useSessions(studentId);
 
   if (profileLoading) {
     return (

@@ -2,7 +2,7 @@
 import { 
   BookOpen, Search, Clock, Users, Star, TrendingUp, Award, 
   ChevronRight, Bell, Calendar, Target, Zap, Filter, Grid, List,
-  BarChart3, Video, MessageCircle, Settings, User, Home, Menu
+  BarChart3, Video, MessageCircle, Settings, User, Home, Menu, Play
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
@@ -15,6 +15,7 @@ import Schedule from '../../components/Schedule';
 import Progress from '../../components/Progress';
 import Achievements from '../../components/Achievements';
 import Feedback from '../../components/Feedback';
+import LiveSession from '../../components/LiveSession';
 import { studentService, sessionService } from '@/services/apiService';
 import { useStudentAnalytics } from '@/hooks/useStudentAPI';
 import { useStudyTracker } from '@/hooks/useStudyTracker';
@@ -24,6 +25,7 @@ const Dashboard = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [enrolledCourses, setEnrolledCourses] = useState([]);
   const [upcomingSessions, setUpcomingSessions] = useState([]);
+  const [activeSessionId, setActiveSessionId] = useState(null);
   const [coursesLoading, setCoursesLoading] = useState(true);
   const [coursesError, setCoursesError] = useState(null);
   
@@ -59,35 +61,48 @@ const Dashboard = () => {
         setCoursesLoading(true);
         setCoursesError(null);
         
-        // Fetch courses and sessions in parallel
-        const [courses, sessions] = await Promise.all([
+        // Fetch enrolled courses and sessions (live + upcoming) in parallel
+        const [courses, liveSessionsData, upcomingSessionsData] = await Promise.all([
           studentService.getEnrolledCourses(user.ID),
-          sessionService.getUpcomingSessions()
+          sessionService.getLiveSessions(user.ID),
+          sessionService.getUpcomingSessions(user.ID)
         ]);
         
+        const enrolledCourseIds = new Set();
         if (courses && Array.isArray(courses)) {
           // Transform the data to match the expected format for CourseCard
-          const transformedCourses = courses.map(course => ({
-            id: course.id || course.ID,
-            title: course.name || course.title,
-            progress: course.progress || 0,
-            nextLesson: course.next_lesson || 'Start Course',
-            instructor: course.teacher_name || course.instructor || 'Instructor',
-            thumbnail: course.thumbnail || 'bg-gradient-to-br from-secondary to-secondary/50',
-            timeLeft: course.time_left || 'N/A',
-            category: course.category || course.subject || 'General'
-          }));
+          const transformedCourses = courses.map(course => {
+            const cid = course.id || course.ID;
+            if (cid != null) enrolledCourseIds.add(Number(cid));
+            return {
+              id: cid,
+              title: course.name || course.title,
+              progress: course.progress || 0,
+              nextLesson: course.next_lesson || 'Start Course',
+              instructor: course.teacher_name || course.instructor || 'Instructor',
+              thumbnail: course.thumbnail || 'bg-gradient-to-br from-secondary to-secondary/50',
+              timeLeft: course.time_left || 'N/A',
+              category: course.category || course.subject || 'General'
+            };
+          });
           
           setEnrolledCourses(transformedCourses);
         } else {
           setEnrolledCourses([]);
         }
 
-        if (sessions && Array.isArray(sessions)) {
-          setUpcomingSessions(sessions.slice(0, 3)); // show top 3 upcoming sessions
-        } else {
-          setUpcomingSessions([]);
-        }
+        const liveList = (Array.isArray(liveSessionsData) ? liveSessionsData : []).map(s => ({ ...s, _isLive: true }));
+        const upcomingList = (Array.isArray(upcomingSessionsData) ? upcomingSessionsData : []).map(s => ({ ...s, _isLive: false }));
+        const combinedSessions = [...liveList, ...upcomingList]
+          .filter(s => {
+            const cid = s.course_id ?? s.courseId ?? s.CourseID;
+            return cid != null && enrolledCourseIds.has(Number(cid));
+          })
+          .sort((a, b) => {
+            if (a._isLive !== b._isLive) return a._isLive ? -1 : 1;
+            return new Date(a.start_time) - new Date(b.start_time);
+          });
+        setUpcomingSessions(combinedSessions);
       } catch (error) {
         console.error('Failed to fetch enrolled courses:', error);
         setCoursesError('Failed to load enrolled courses');
@@ -131,7 +146,7 @@ const Dashboard = () => {
     // Use enrolled courses instead of hardcoded data
     const recentCourses = enrolledCourses.slice(0, 4); // Show only first 4 courses
 
-    const formattedUpcomingEvents = upcomingSessions.map(session => ({
+    const formattedUpcomingEvents = upcomingSessions.slice(0, 3).map(session => ({
       id: session.id,
       type: 'live',
       title: session.title,
@@ -236,21 +251,21 @@ const Dashboard = () => {
 
         {/* Main Content Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Courses Section */}
+          {/* Upcoming Scheduled Classes Section */}
           <div className="lg:col-span-2">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-gray-900">Continue Learning</h2>
+              <h2 className="text-2xl font-bold text-gray-900">Upcoming Scheduled Classes</h2>
               <button 
-                onClick={() => setActiveView('courses')}
+                onClick={() => setActiveView('schedule')}
                 className="text-indigo-600 hover:text-indigo-700 font-medium text-sm flex items-center gap-1"
               >
-                View All Courses <ChevronRight size={16} />
+                View Schedule <ChevronRight size={16} />
               </button>
             </div>
             
             {coursesLoading ? (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {[1, 2, 3, 4].map(i => (
+                {[1, 2].map(i => (
                   <div key={i} className="bg-white rounded-2xl p-6 border border-gray-100 animate-pulse">
                     <div className="flex items-start gap-4 mb-4">
                       <div className="w-12 h-12 bg-gray-200 rounded-xl"></div>
@@ -259,19 +274,16 @@ const Dashboard = () => {
                         <div className="h-3 bg-gray-200 rounded w-3/4"></div>
                       </div>
                     </div>
-                    <div className="space-y-4">
-                      <div className="h-2 bg-gray-200 rounded"></div>
-                      <div className="h-8 bg-gray-200 rounded-xl"></div>
-                    </div>
+                    <div className="h-4 bg-gray-200 rounded w-1/2"></div>
                   </div>
                 ))}
               </div>
             ) : coursesError ? (
               <div className="bg-white rounded-2xl p-8 border border-gray-100 text-center">
                 <div className="text-red-500 mb-2">
-                  <BookOpen size={48} className="mx-auto mb-4" />
+                  <Calendar size={48} className="mx-auto mb-4" />
                 </div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Failed to Load Courses</h3>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Failed to Load Classes</h3>
                 <p className="text-gray-500 mb-4">{coursesError}</p>
                 <button 
                   onClick={() => window.location.reload()}
@@ -280,13 +292,13 @@ const Dashboard = () => {
                   Try Again
                 </button>
               </div>
-            ) : recentCourses.length === 0 ? (
+            ) : upcomingSessions.length === 0 ? (
               <div className="bg-white rounded-2xl p-8 border border-gray-100 text-center">
                 <div className="text-gray-400 mb-4">
-                  <BookOpen size={48} className="mx-auto mb-4" />
+                  <Calendar size={48} className="mx-auto mb-4" />
                 </div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">No Enrolled Courses Yet</h3>
-                <p className="text-gray-500 mb-4">Start your learning journey by enrolling in a course</p>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">No Upcoming Scheduled Classes</h3>
+                <p className="text-gray-500 mb-4">You have no upcoming scheduled classes for your enrolled courses</p>
                 <button 
                   onClick={() => setActiveView('courses')}
                   className="bg-indigo-600 text-white px-6 py-3 rounded-xl font-medium hover:bg-indigo-700 transition-all duration-200"
@@ -296,9 +308,78 @@ const Dashboard = () => {
               </div>
             ) : (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {recentCourses.map(course => (
-                  <CourseCard key={course.id} course={course} />
-                ))}
+                {upcomingSessions.slice(0, 6).map(session => {
+                  const now = new Date();
+                  const start = new Date(session.start_time);
+                  const end = new Date(session.end_time);
+                  const isLive = session._isLive || (session.status === 'active' && now >= start && now <= end);
+
+                  return (
+                    <div
+                      key={session.id}
+                      onClick={() => !isLive && setActiveView('schedule')}
+                      className={`bg-white rounded-2xl p-6 border transition-all duration-300 group ${
+                        isLive
+                          ? 'border-red-200 ring-2 ring-red-100 hover:shadow-lg'
+                          : 'border-gray-100 hover:shadow-lg cursor-pointer'
+                      }`}
+                    >
+                      <div className="flex items-start gap-4 mb-4">
+                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300 ${
+                          isLive ? 'bg-red-100 text-red-600' : 'bg-emerald-100 text-emerald-600'
+                        }`}>
+                          <Video size={20} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {isLive && (
+                              <span className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 bg-red-100 px-2 py-0.5 rounded-lg uppercase">
+                                <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"></span>
+                                Live
+                              </span>
+                            )}
+                            <span className="text-xs font-medium text-emerald-700 bg-emerald-50 px-2 py-1 rounded-lg">
+                              {session.course_name || 'Scheduled Class'}
+                            </span>
+                          </div>
+                          <h3 className="font-semibold text-gray-900 mt-2 mb-1 truncate">{session.title}</h3>
+                          {session.teacher_name && (
+                            <p className="text-sm text-gray-500">with {session.teacher_name}</p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between pt-3 border-t border-gray-100 text-sm text-gray-600">
+                        <span className="flex items-center gap-1.5">
+                          <Clock size={14} className="text-gray-400" />
+                          {start.toLocaleString(undefined, {
+                            weekday: 'short',
+                            month: 'short',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </span>
+                        {isLive ? (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setActiveSessionId(session.id || session.ID);
+                            }}
+                            className="bg-gradient-to-r from-red-600 to-pink-600 text-white px-4 py-1.5 rounded-xl text-xs font-semibold hover:shadow-md hover:scale-105 transition-all duration-200 flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <Play size={12} />
+                            Join Now
+                          </button>
+                        ) : (
+                          <span className="text-indigo-600 font-medium text-xs flex items-center gap-0.5">
+                            Open Schedule <ChevronRight size={14} />
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -385,6 +466,13 @@ const Dashboard = () => {
           profileData={profileStatus.profile}
           missingFields={profileStatus.missingFields}
           completionPercentage={profileStatus.completionPercentage}
+        />
+      )}
+      {/* Live Session Modal */}
+      {activeSessionId && (
+        <LiveSession 
+          sessionId={activeSessionId} 
+          onLeave={() => setActiveSessionId(null)}
         />
       )}
     </div>

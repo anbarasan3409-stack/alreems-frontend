@@ -76,14 +76,16 @@ const AgoraVideoSession = ({
   const strokesHistoryRef = useRef([]);
   const localVideoTrackRef = useRef(null);
   const localAudioTrackRef = useRef(null);
+  const cameraTrackRef = useRef(null);
+  const screenTrackRef = useRef(null);
   const [controlNotice, setControlNotice] = useState(null);
 
   localVideoTrackRef.current = localVideoTrack;
   localAudioTrackRef.current = localAudioTrack;
   
   // Control states
-  const [isVideoEnabled, setIsVideoEnabled] = useState(false); // Default OFF
-  const [isAudioEnabled, setIsAudioEnabled] = useState(false); // Default OFF
+  const [isVideoEnabled, setIsVideoEnabled] = useState(true); // Default ON
+  const [isAudioEnabled, setIsAudioEnabled] = useState(true); // Default ON
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [volume, setVolume] = useState(50);
   const [videoReady, setVideoReady] = useState(false);
@@ -512,81 +514,63 @@ Your App ID (${appId}) is configured correctly. The issue is that App Certificat
 
   const createAndPublishTracks = async (agoraClient) => {
     try {
-
-      
       // Check if browser supports getUserMedia
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         throw new Error('Your browser does not support camera/microphone access. Please use a modern browser like Chrome, Firefox, or Safari.');
       }
 
-      // Request permissions first
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ 
-          video: true, 
-          audio: true 
-        });
-        // Stop the test stream
-        stream.getTracks().forEach(track => track.stop());
-
-      } catch (permError) {
-        console.error('Permission denied:', permError);
-        
-        if (permError.name === 'NotAllowedError') {
-          throw new Error(`🎥 Camera/Microphone Access Denied
-
-Please follow these steps:
-1. Click the camera/microphone icon in your browser's address bar
-2. Select "Allow" for camera and microphone
-3. Refresh this page and try again
-
-Or in browser settings:
-• Chrome: Settings → Privacy → Site Settings → Camera/Microphone
-• Safari: Preferences → Websites → Camera/Microphone
-• Firefox: Preferences → Privacy → Permissions`);
-        } else if (permError.name === 'NotFoundError') {
-          throw new Error('No camera or microphone found. Please connect a camera/microphone and try again.');
-        } else if (permError.name === 'NotReadableError') {
-          throw new Error('Camera or microphone is being used by another application. Please close other apps and try again.');
-        } else {
-          throw new Error(`Camera/Microphone error: ${permError.message}`);
-        }
-      }
-
-      // Import AgoraRTC for track creation
+      // Import AgoraRTC for track creation (creates tracks directly without duplicate getUserMedia prompt)
       const AgoraRTCModule = await import('agora-rtc-sdk-ng');
       const AgoraRTC = AgoraRTCModule.default;
 
+      let videoTrack = null;
+      let audioTrack = null;
 
-      
-      // Create camera and microphone tracks
-      const [videoTrack, audioTrack] = await Promise.all([
-        AgoraRTC.createCameraVideoTrack({
-          encoderConfig: {
-            width: 640,
-            height: 480,
-            frameRate: 15,
-            bitrateMin: 400,
-            bitrateMax: 1000,
-          }
-        }),
-        AgoraRTC.createMicrophoneAudioTrack({
-          encoderConfig: "music_standard",
-        })
-      ]);
+      try {
+        [videoTrack, audioTrack] = await Promise.all([
+          AgoraRTC.createCameraVideoTrack({
+            encoderConfig: {
+              width: 640,
+              height: 480,
+              frameRate: 15,
+              bitrateMin: 400,
+              bitrateMax: 1000,
+            }
+          }),
+          AgoraRTC.createMicrophoneAudioTrack({
+            encoderConfig: "music_standard",
+          })
+        ]);
+      } catch (bothErr) {
+        // Fallback: try audio and video separately so one missing device doesn't block the other
+        try {
+          audioTrack = await AgoraRTC.createMicrophoneAudioTrack({ encoderConfig: "music_standard" });
+        } catch (aErr) {
+          console.warn('Microphone access failed:', aErr);
+        }
+        try {
+          videoTrack = await AgoraRTC.createCameraVideoTrack({
+            encoderConfig: { width: 640, height: 480, frameRate: 15, bitrateMin: 400, bitrateMax: 1000 }
+          });
+        } catch (vErr) {
+          console.warn('Camera access failed:', vErr);
+        }
+        if (!audioTrack && !videoTrack) {
+          throw bothErr;
+        }
+      }
 
+      cameraTrackRef.current = videoTrack;
       setLocalVideoTrack(videoTrack);
       setLocalAudioTrack(audioTrack);
+      setIsVideoEnabled(Boolean(videoTrack));
+      setIsAudioEnabled(Boolean(audioTrack));
 
-
-      
-      // Publish tracks to the channel (must be enabled when publishing)
-      await agoraClient.publish([videoTrack, audioTrack]);
-
-
-      // Now disable tracks after publishing (student starts with mic and camera off)
-      await videoTrack.setEnabled(false);
-      await audioTrack.setEnabled(false);
-
+      // Publish tracks enabled by default
+      const tracksToPublish = [videoTrack, audioTrack].filter(Boolean);
+      if (tracksToPublish.length > 0) {
+        await agoraClient.publish(tracksToPublish);
+      }
 
       // Note: Video playback will be handled by the useEffect when the component renders
 
@@ -596,6 +580,8 @@ Or in browser settings:
         setError(error.message || 'Failed to access camera or microphone. Please check permissions and try again.');
       } else {
         console.warn('Student media access unavailable or declined, joining in listen-only mode:', error);
+        setIsVideoEnabled(false);
+        setIsAudioEnabled(false);
       }
     }
   };
@@ -800,42 +786,72 @@ Or in browser settings:
 
   const startScreenShare = async () => {
     try {
+      const AgoraRTCModule = await import('agora-rtc-sdk-ng');
+      const AgoraRTC = AgoraRTCModule.default;
       const screenTrack = await AgoraRTC.createScreenVideoTrack();
-      
-      // Replace video track with screen share
-      if (localVideoTrack) {
-        await client.unpublish(localVideoTrack);
-        localVideoTrack.close();
+
+      const currentClient = clientRef.current || client;
+      if (!currentClient) return;
+
+      // Keep camera track alive (unpublish + disable) so stopping screen share doesn't re-prompt permission
+      const camTrack = cameraTrackRef.current || localVideoTrack;
+      if (camTrack) {
+        await currentClient.unpublish(camTrack);
+        await camTrack.setEnabled(false);
       }
-      
-      await client.publish(screenTrack);
-      screenTrack.play(localVideoRef.current);
-      
+
+      await currentClient.publish(screenTrack);
+      screenTrackRef.current = screenTrack;
+      if (localVideoRef.current) {
+        screenTrack.play(localVideoRef.current);
+      }
+
       setLocalVideoTrack(screenTrack);
       setIsScreenSharing(true);
-      
+      setIsVideoEnabled(true);
+
       // Listen for screen share end
       screenTrack.on('track-ended', () => {
         stopScreenShare();
       });
-      
     } catch (error) {
       console.error('Failed to start screen share:', error);
-      setError('Failed to start screen sharing. Please try again.');
+      setIsScreenSharing(false);
     }
   };
 
   const stopScreenShare = async () => {
-    if (localVideoTrack && isScreenSharing) {
-      await client.unpublish(localVideoTrack);
-      localVideoTrack.close();
-      
-      // Create new camera track
-      const newVideoTrack = await AgoraRTC.createCameraVideoTrack();
-      await client.publish(newVideoTrack);
-      newVideoTrack.play(localVideoRef.current);
-      
-      setLocalVideoTrack(newVideoTrack);
+    try {
+      const currentClient = clientRef.current || client;
+      if (!currentClient) return;
+
+      const activeScreenTrack = screenTrackRef.current || (isScreenSharing ? localVideoTrack : null);
+      if (activeScreenTrack) {
+        await currentClient.unpublish(activeScreenTrack);
+        activeScreenTrack.close();
+        screenTrackRef.current = null;
+      }
+
+      let camTrack = cameraTrackRef.current;
+      if (!camTrack) {
+        const AgoraRTCModule = await import('agora-rtc-sdk-ng');
+        const AgoraRTC = AgoraRTCModule.default;
+        camTrack = await AgoraRTC.createCameraVideoTrack();
+        cameraTrackRef.current = camTrack;
+      } else {
+        await camTrack.setEnabled(true);
+      }
+
+      await currentClient.publish(camTrack);
+      if (localVideoRef.current) {
+        camTrack.play(localVideoRef.current);
+      }
+
+      setLocalVideoTrack(camTrack);
+      setIsScreenSharing(false);
+      setIsVideoEnabled(true);
+    } catch (error) {
+      console.error('Failed to stop screen share:', error);
       setIsScreenSharing(false);
     }
   };
@@ -843,11 +859,19 @@ Or in browser settings:
   const leaveSession = async () => {
     try {
       // Clean up local tracks
+      if (cameraTrackRef.current) {
+        try { cameraTrackRef.current.close(); } catch (e) {}
+        cameraTrackRef.current = null;
+      }
+      if (screenTrackRef.current) {
+        try { screenTrackRef.current.close(); } catch (e) {}
+        screenTrackRef.current = null;
+      }
       if (localVideoTrack) {
-        localVideoTrack.close();
+        try { localVideoTrack.close(); } catch (e) {}
       }
       if (localAudioTrack) {
-        localAudioTrack.close();
+        try { localAudioTrack.close(); } catch (e) {}
       }
       
       // Leave channel
