@@ -112,12 +112,37 @@ const AgoraVideoSession = ({
   const isScreenSharingRef = useRef(false);
   isScreenSharingRef.current = isScreenSharing;
   const stopScreenShareRef = useRef(null);
+  const hasMarkedAttendanceRef = useRef(false);
   const hasMarkedLeaveRef = useRef(false);
+  const userRolesRef = useRef(userRoles);
+  userRolesRef.current = userRoles;
+
+  const markStudentAttendance = () => {
+    if (hasMarkedAttendanceRef.current) return;
+    if (!sessionId || !studentId || Number(studentId) <= 0) return;
+    hasMarkedAttendanceRef.current = true;
+    hasMarkedLeaveRef.current = false;
+    try {
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:9000';
+      fetch(`${backendUrl}/api/students/attendance/mark`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: Number(sessionId),
+          student_id: Number(studentId)
+        })
+      }).catch(err => console.warn('Attendance auto-record background error:', err));
+    } catch (e) {
+      // Non-blocking
+    }
+  };
 
   const recordAttendanceLeave = () => {
+    if (!hasMarkedAttendanceRef.current) return; // Never start leave if attendance never started (instructor hadn't joined)
     if (hasMarkedLeaveRef.current) return;
     if (!sessionId || !studentId || Number(studentId) <= 0) return;
     hasMarkedLeaveRef.current = true;
+    hasMarkedAttendanceRef.current = false;
     try {
       const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:9000';
       const url = `${backendUrl}/api/students/attendance/leave`;
@@ -441,6 +466,8 @@ const AgoraVideoSession = ({
             } catch (replyErr) {
               console.warn('Failed to reply to role_query:', replyErr);
             }
+          } else if (msg.type === 'session_ended') {
+            recordAttendanceLeave();
           } else if (msg.type === 'user_role') {
             if (msg.uid && msg.role) {
               setUserRoles(prev => {
@@ -623,23 +650,6 @@ const AgoraVideoSession = ({
         }
       }
       setIsJoined(true);
-
-      // Automatically record student attendance in database
-      if (sessionId && studentId && Number(studentId) > 0) {
-        try {
-          const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:9000';
-          fetch(`${backendUrl}/api/students/attendance/mark`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              session_id: Number(sessionId),
-              student_id: Number(studentId)
-            })
-          }).catch(err => console.warn('Attendance auto-record background error:', err));
-        } catch (e) {
-          // Non-blocking
-        }
-      }
 
       // Broadcast student name & profile and request whiteboard state via Agora Data Stream
       const broadcastProfileAndSync = async () => {
@@ -905,18 +915,36 @@ Your App ID (${appId}) is configured correctly. The issue is that App Certificat
   };
 
   const handleUserLeft = (user) => {
+    const leavingRole =
+      userRolesRef.current.get(user.uid) ||
+      userRolesRef.current.get(Number(user.uid)) ||
+      userRolesRef.current.get(String(user.uid));
 
-    
+    if (leavingRole === 'teacher') {
+      recordAttendanceLeave();
+    }
+
     // Remove immediately - no delay needed with proper cleanup
     setRemoteUsers(prev => {
       const newMap = new Map(prev);
       if (newMap.has(user.uid)) {
-
         newMap.delete(user.uid);
       }
       return newMap;
     });
   };
+
+  // Start student attendance ONLY once an instructor (role === 'teacher') is present in the channel
+  useEffect(() => {
+    if (!isJoined) return;
+    const instructorPresent = Array.from(remoteUsers.values()).some((u) => {
+      const r = userRoles.get(u.uid) || userRoles.get(Number(u.uid)) || userRoles.get(String(u.uid));
+      return r === 'teacher';
+    });
+    if (instructorPresent) {
+      markStudentAttendance();
+    }
+  }, [isJoined, remoteUsers, userRoles]);
 
   // Control functions
   const toggleVideo = async () => {
