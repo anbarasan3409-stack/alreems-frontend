@@ -497,7 +497,12 @@ const AgoraVideoSession = ({
                   } else {
                     const AgoraRTCModule = await import('agora-rtc-sdk-ng');
                     const AgoraRTC = AgoraRTCModule.default;
-                    const audioTrack = await AgoraRTC.createMicrophoneAudioTrack({ encoderConfig: "music_standard" });
+                    const audioTrack = await AgoraRTC.createMicrophoneAudioTrack({
+                      encoderConfig: "speech_standard",
+                      AEC: true,
+                      ANS: true,
+                      AGC: true,
+                    });
                     setLocalAudioTrack(audioTrack);
                     localAudioTrackRef.current = audioTrack;
                     const currentClient = agoraClient || clientRef.current;
@@ -698,13 +703,21 @@ Your App ID (${appId}) is configured correctly. The issue is that App Certificat
             }
           }),
           AgoraRTC.createMicrophoneAudioTrack({
-            encoderConfig: "music_standard",
+            encoderConfig: "speech_standard",
+            AEC: true,
+            ANS: true,
+            AGC: true,
           })
         ]);
       } catch (bothErr) {
         // Fallback: try audio and video separately so one missing device doesn't block the other
         try {
-          audioTrack = await AgoraRTC.createMicrophoneAudioTrack({ encoderConfig: "music_standard" });
+          audioTrack = await AgoraRTC.createMicrophoneAudioTrack({
+            encoderConfig: "speech_standard",
+            AEC: true,
+            ANS: true,
+            AGC: true,
+          });
         } catch (aErr) {
           console.warn('Microphone access failed:', aErr);
         }
@@ -931,7 +944,10 @@ Your App ID (${appId}) is configured correctly. The issue is that App Certificat
         const AgoraRTCModule = await import('agora-rtc-sdk-ng');
         const AgoraRTC = AgoraRTCModule.default;
         const audioTrack = await AgoraRTC.createMicrophoneAudioTrack({
-          encoderConfig: "music_standard",
+          encoderConfig: "speech_standard",
+          AEC: true,
+          ANS: true,
+          AGC: true,
         });
         setLocalAudioTrack(audioTrack);
         localAudioTrackRef.current = audioTrack;
