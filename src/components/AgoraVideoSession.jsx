@@ -433,6 +433,61 @@ const AgoraVideoSession = ({
                 setIsVideoEnabled(false);
                 setControlNotice('Your camera was turned off by the instructor.');
                 setTimeout(() => setControlNotice(null), 4500);
+              } else if (msg.action === 'unmute_audio') {
+                try {
+                  if (localAudioTrackRef.current) {
+                    await localAudioTrackRef.current.setEnabled(true);
+                  } else {
+                    const AgoraRTCModule = await import('agora-rtc-sdk-ng');
+                    const AgoraRTC = AgoraRTCModule.default;
+                    const audioTrack = await AgoraRTC.createMicrophoneAudioTrack({ encoderConfig: "music_standard" });
+                    setLocalAudioTrack(audioTrack);
+                    localAudioTrackRef.current = audioTrack;
+                    const currentClient = agoraClient || clientRef.current;
+                    if (currentClient) {
+                      await currentClient.publish([audioTrack]);
+                    }
+                  }
+                  setIsAudioEnabled(true);
+                  setControlNotice('Your microphone was unmuted by the instructor.');
+                  setTimeout(() => setControlNotice(null), 4500);
+                } catch (e) {
+                  console.warn('Error enabling local audio track:', e);
+                  setControlNotice('Instructor asked to unmute. Please allow microphone access and tap Mic.');
+                  setTimeout(() => setControlNotice(null), 5000);
+                }
+              } else if (msg.action === 'unmute_video') {
+                try {
+                  if (localVideoTrackRef.current) {
+                    await localVideoTrackRef.current.setEnabled(true);
+                    if (localVideoRef.current) {
+                      localVideoTrackRef.current.play(localVideoRef.current);
+                    }
+                  } else {
+                    const AgoraRTCModule = await import('agora-rtc-sdk-ng');
+                    const AgoraRTC = AgoraRTCModule.default;
+                    const videoTrack = await AgoraRTC.createCameraVideoTrack({
+                      encoderConfig: { width: 640, height: 480, frameRate: 15, bitrateMin: 400, bitrateMax: 1000 }
+                    });
+                    setLocalVideoTrack(videoTrack);
+                    localVideoTrackRef.current = videoTrack;
+                    cameraTrackRef.current = videoTrack;
+                    const currentClient = agoraClient || clientRef.current;
+                    if (currentClient) {
+                      await currentClient.publish([videoTrack]);
+                    }
+                    if (localVideoRef.current) {
+                      videoTrack.play(localVideoRef.current);
+                    }
+                  }
+                  setIsVideoEnabled(true);
+                  setControlNotice('Your camera was turned on by the instructor.');
+                  setTimeout(() => setControlNotice(null), 4500);
+                } catch (e) {
+                  console.warn('Error enabling local video track:', e);
+                  setControlNotice('Instructor asked to turn on camera. Please allow camera access and tap Camera.');
+                  setTimeout(() => setControlNotice(null), 5000);
+                }
               }
             }
           }
