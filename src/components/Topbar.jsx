@@ -24,52 +24,49 @@ const Topbar = ({ searchQuery, setSearchQuery, activeView, setActiveView }) => {
 
   return (
     <header className="bg-white border-b border-gray-100 sticky top-0 z-10">
-      <div className="max-w-7xl mx-auto px-0 py-6">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-4">
-            <button className="lg:hidden p-2 text-gray-400 hover:text-gray-600 transition-colors">
-              <Menu size={24} />
-            </button>
-            <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-xl flex items-center justify-center">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
+        <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 flex-shrink-0 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-xl flex items-center justify-center">
               <User size={20} className="text-white" />
             </div>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">
+            <div className="min-w-0">
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-900 truncate">
                 Good morning, {user?.name || 'Student'}!
               </h1>
-              <p className="text-gray-500">Ready to continue your learning journey?</p>
+              <p className="text-xs sm:text-sm text-gray-500 truncate">Ready to continue your learning journey?</p>
             </div>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-4 w-full sm:w-auto">
             {/* Search */}
-            <div className="relative">
-              <Search size={20} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+            <div className="relative flex-1 sm:flex-initial min-w-0">
+              <Search size={18} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
               <input
                 type="text"
                 placeholder="Search courses..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 pr-4 py-2 w-80 border border-gray-200 rounded-lg text-black focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                className="pl-10 pr-4 py-2 w-full sm:w-56 md:w-72 lg:w-80 border border-gray-200 rounded-lg text-sm text-black focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
               />
             </div>
 
             {/* Logout */}
             <button 
               onClick={handleLogout}
-              className="p-2 text-gray-400 hover:text-red-600 transition-colors"
+              className="p-2 flex-shrink-0 text-gray-400 hover:text-red-600 transition-colors"
               title="Logout"
             >
-              <LogOut size={24} />
+              <LogOut size={22} />
             </button>
           </div>
         </div>
       {/* Navigation */}
-      <nav className="flex items-center gap-2">
+      <nav className="flex items-center gap-2 overflow-x-auto pb-1">
         {navItems.map(item => (
           <button
             key={item.id}
             onClick={() => setActiveView(item.id)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-200 ${
+            className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg transition-all duration-200 whitespace-nowrap flex-shrink-0 ${
               activeView === item.id 
                 ? 'bg-indigo-50 text-indigo-600 font-medium' 
                 : 'text-gray-600 hover:bg-gray-50'

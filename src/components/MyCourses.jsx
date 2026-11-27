@@ -64,7 +64,7 @@ const MyCourses = ({ searchQuery }) => {
   if (profileLoading || enrolledLoading || availableLoading) {
     return (
       <div className="min-h-screen bg-gray-50 pb-8">
-        <main className="max-w-7xl mx-auto p-0 space-y-8 mt-2">
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 space-y-8 mt-2">
           <div className="flex items-center justify-center py-20">
             <div className="text-center">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
@@ -80,7 +80,7 @@ const MyCourses = ({ searchQuery }) => {
   if (enrolledError || availableError) {
     return (
       <div className="min-h-screen bg-gray-50 pb-8">
-        <main className="max-w-7xl mx-auto p-0 space-y-8 mt-2">
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 space-y-8 mt-2">
           <div className="flex items-center justify-center py-20">
             <div className="text-center">
               <p className="text-red-600 mb-2">Error loading courses:</p>
@@ -199,7 +199,7 @@ const MyCourses = ({ searchQuery }) => {
 
   return (
     <div className="min-h-screen bg-gray-50 pb-8">
-      <main className="max-w-7xl mx-auto p-0 space-y-8 mt-2">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 space-y-8 mt-2">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>

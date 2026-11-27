@@ -9,7 +9,11 @@ import {
   Settings,
   Volume2,
   VolumeX,
-  PenTool
+  PenTool,
+  MessageSquare,
+  Monitor,
+  Send,
+  X
 } from 'lucide-react';
 import { COLORS } from '@/theme/themeConstants';
 import dynamic from 'next/dynamic';
@@ -89,6 +93,23 @@ const AgoraVideoSession = ({
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [volume, setVolume] = useState(50);
   const [videoReady, setVideoReady] = useState(false);
+
+  // Chat states
+  const [showChat, setShowChat] = useState(false);
+  const [chatEnabled, setChatEnabled] = useState(true);
+  const [chatMessages, setChatMessages] = useState([]);
+  const [chatInput, setChatInput] = useState('');
+  const [unreadChatCount, setUnreadChatCount] = useState(0);
+  const showChatRef = useRef(false);
+  showChatRef.current = showChat;
+
+  // Screen share permissions (controlled by teacher overall & per-student)
+  const [globalScreenShareAllowed, setGlobalScreenShareAllowed] = useState(true);
+  const [personalScreenShareAllowed, setPersonalScreenShareAllowed] = useState(true);
+  const canScreenShare = globalScreenShareAllowed && personalScreenShareAllowed;
+  const isScreenSharingRef = useRef(false);
+  isScreenSharingRef.current = isScreenSharing;
+  const stopScreenShareRef = useRef(null);
   
   // Force video playback on user interaction
   const forceVideoPlayback = async () => {
@@ -200,32 +221,41 @@ const AgoraVideoSession = ({
 
   // Handle page reload/navigation to cleanup Agora session
   useEffect(() => {
-    const handleBeforeUnload = async (e) => {
-
-      
-      // Synchronous cleanup for beforeunload
+    const cleanupResources = () => {
       try {
-        if (localVideoTrack) {
-          localVideoTrack.close();
+        if (cameraTrackRef.current) {
+          try { cameraTrackRef.current.close(); } catch (e) {}
+          cameraTrackRef.current = null;
         }
-        if (localAudioTrack) {
-          localAudioTrack.close();
+        if (screenTrackRef.current) {
+          try { screenTrackRef.current.close(); } catch (e) {}
+          screenTrackRef.current = null;
+        }
+        if (localVideoTrackRef.current) {
+          try { localVideoTrackRef.current.close(); } catch (e) {}
+        }
+        if (localAudioTrackRef.current) {
+          try { localAudioTrackRef.current.close(); } catch (e) {}
         }
         if (clientRef.current) {
-          clientRef.current.leave();
+          clientRef.current.leave().catch(() => {});
           clientRef.current.removeAllListeners();
         }
       } catch (error) {
-        console.error('Error in beforeunload cleanup:', error);
+        console.error('Error in navigation cleanup:', error);
       }
     };
 
-    window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('beforeunload', cleanupResources);
+    window.addEventListener('pagehide', cleanupResources);
+    window.addEventListener('popstate', cleanupResources);
     
     return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('beforeunload', cleanupResources);
+      window.removeEventListener('pagehide', cleanupResources);
+      window.removeEventListener('popstate', cleanupResources);
     };
-  }, [localVideoTrack, localAudioTrack]);
+  }, []);
 
   // Initialize Agora SDK
   useEffect(() => {
@@ -254,27 +284,28 @@ const AgoraVideoSession = ({
     return () => {
       isMounted = false;
       
-      // Clean up Agora resources
+      // Clean up Agora resources using refs (avoids stale closure)
       const cleanup = async () => {
         try {
-
-          
-          // Close local tracks
-          if (localVideoTrack) {
-            localVideoTrack.close();
+          if (cameraTrackRef.current) {
+            try { cameraTrackRef.current.close(); } catch (e) {}
+            cameraTrackRef.current = null;
           }
-          if (localAudioTrack) {
-            localAudioTrack.close();
+          if (screenTrackRef.current) {
+            try { screenTrackRef.current.close(); } catch (e) {}
+            screenTrackRef.current = null;
           }
-          
-          // Leave channel and clean up client
+          if (localVideoTrackRef.current) {
+            try { localVideoTrackRef.current.close(); } catch (e) {}
+          }
+          if (localAudioTrackRef.current) {
+            try { localAudioTrackRef.current.close(); } catch (e) {}
+          }
           if (clientRef.current) {
             await clientRef.current.leave();
             clientRef.current.removeAllListeners();
             clientRef.current = null;
           }
-          
-
         } catch (error) {
           console.error('Error during cleanup:', error);
         }
@@ -300,13 +331,12 @@ const AgoraVideoSession = ({
       // Guard: fallback to sessionId if channelName is missing
       const effectiveChannelName = channelName || `session_${sessionId}`;
 
-      // Use student's numeric database ID as Agora UID if available, else random fallback
-      const uid = studentId && !isNaN(Number(studentId)) && Number(studentId) > 0
-        ? Number(studentId)
-        : Math.floor(Math.random() * 1000000) + 1;
+      // Use a fresh unique UID per join to prevent UID_CONFLICT on rapid rejoin / back navigation
+      // (studentId and studentName are broadcast via student_info stream message)
+      let uid = Math.floor(Math.random() * 10000000) + 1;
 
       // Generate token for the channel
-      const token = await agoraTokenService.generateToken(effectiveChannelName, userRole, uid);
+      let token = await agoraTokenService.generateToken(effectiveChannelName, userRole, uid);
 
       // Create Agora client with different modes to handle certificate issues
       let agoraClient;
@@ -362,6 +392,24 @@ const AgoraVideoSession = ({
                 });
               }
             }
+          } else if (msg.type === 'role_query' || msg.type === 'discover_roles') {
+            // Reply with student identity so late-joining teachers/admins see our real name
+            try {
+              const current = agoraClient || clientRef.current;
+              if (current) {
+                const myUid = current.uid || uid;
+                await current.sendStreamMessage(JSON.stringify({
+                  type: 'student_info',
+                  role: 'student',
+                  uid: myUid,
+                  studentId: studentId,
+                  name: studentName,
+                  email: studentEmail
+                }));
+              }
+            } catch (replyErr) {
+              console.warn('Failed to reply to role_query:', replyErr);
+            }
           } else if (msg.type === 'user_role') {
             if (msg.uid && msg.role) {
               setUserRoles(prev => {
@@ -375,6 +423,42 @@ const AgoraVideoSession = ({
                 setResolvedTeacherName(msg.name);
               }
             }
+          } else if (msg.type === 'chat_toggle') {
+            const enabled = Boolean(msg.enabled);
+            setChatEnabled(enabled);
+            setControlNotice(
+              enabled
+                ? 'Class chat has been enabled by the instructor.'
+                : 'Class chat has been disabled by the instructor.'
+            );
+            setTimeout(() => setControlNotice(null), 3500);
+          } else if (msg.type === 'chat_msg' && msg.text) {
+            setChatMessages(prev => [
+              ...prev.slice(-199),
+              {
+                id: msg.id || `${senderUid}-${Date.now()}`,
+                senderName: msg.senderName || 'Participant',
+                senderRole: msg.senderRole || 'student',
+                text: String(msg.text),
+                timestamp: msg.timestamp || Date.now(),
+                isSelf: false
+              }
+            ]);
+            if (!showChatRef.current) {
+              setUnreadChatCount(c => c + 1);
+            }
+          } else if (msg.type === 'screen_share_toggle') {
+            const enabled = Boolean(msg.enabled);
+            setGlobalScreenShareAllowed(enabled);
+            if (!enabled && isScreenSharingRef.current) {
+              stopScreenShareRef.current?.();
+            }
+            setControlNotice(
+              enabled
+                ? 'Screen sharing has been enabled by the instructor.'
+                : 'Screen sharing has been disabled by the instructor.'
+            );
+            setTimeout(() => setControlNotice(null), 4000);
           } else if (msg.type === 'teacher_control') {
             const myUid = clientRef.current?.uid || uid;
             const matchesMe = 
@@ -406,6 +490,72 @@ const AgoraVideoSession = ({
                 setIsVideoEnabled(false);
                 setControlNotice('Your camera was turned off by the instructor.');
                 setTimeout(() => setControlNotice(null), 4500);
+              } else if (msg.action === 'unmute_audio') {
+                try {
+                  if (localAudioTrackRef.current) {
+                    await localAudioTrackRef.current.setEnabled(true);
+                  } else {
+                    const AgoraRTCModule = await import('agora-rtc-sdk-ng');
+                    const AgoraRTC = AgoraRTCModule.default;
+                    const audioTrack = await AgoraRTC.createMicrophoneAudioTrack({ encoderConfig: "music_standard" });
+                    setLocalAudioTrack(audioTrack);
+                    localAudioTrackRef.current = audioTrack;
+                    const currentClient = agoraClient || clientRef.current;
+                    if (currentClient) {
+                      await currentClient.publish([audioTrack]);
+                    }
+                  }
+                  setIsAudioEnabled(true);
+                  setControlNotice('Your microphone was unmuted by the instructor.');
+                  setTimeout(() => setControlNotice(null), 4500);
+                } catch (e) {
+                  console.warn('Error enabling local audio track:', e);
+                  setControlNotice('Instructor asked to unmute. Please allow microphone access and tap Mic.');
+                  setTimeout(() => setControlNotice(null), 5000);
+                }
+              } else if (msg.action === 'unmute_video') {
+                try {
+                  if (localVideoTrackRef.current) {
+                    await localVideoTrackRef.current.setEnabled(true);
+                    if (localVideoRef.current) {
+                      localVideoTrackRef.current.play(localVideoRef.current);
+                    }
+                  } else {
+                    const AgoraRTCModule = await import('agora-rtc-sdk-ng');
+                    const AgoraRTC = AgoraRTCModule.default;
+                    const videoTrack = await AgoraRTC.createCameraVideoTrack({
+                      encoderConfig: { width: 640, height: 480, frameRate: 15, bitrateMin: 400, bitrateMax: 1000 }
+                    });
+                    setLocalVideoTrack(videoTrack);
+                    localVideoTrackRef.current = videoTrack;
+                    cameraTrackRef.current = videoTrack;
+                    const currentClient = agoraClient || clientRef.current;
+                    if (currentClient) {
+                      await currentClient.publish([videoTrack]);
+                    }
+                    if (localVideoRef.current) {
+                      videoTrack.play(localVideoRef.current);
+                    }
+                  }
+                  setIsVideoEnabled(true);
+                  setControlNotice('Your camera was turned on by the instructor.');
+                  setTimeout(() => setControlNotice(null), 4500);
+                } catch (e) {
+                  console.warn('Error enabling local video track:', e);
+                  setControlNotice('Instructor asked to turn on camera. Please allow camera access and tap Camera.');
+                  setTimeout(() => setControlNotice(null), 5000);
+                }
+              } else if (msg.action === 'disable_screen_share') {
+                setPersonalScreenShareAllowed(false);
+                if (isScreenSharingRef.current) {
+                  stopScreenShareRef.current?.();
+                }
+                setControlNotice('Your screen sharing was disabled by the instructor.');
+                setTimeout(() => setControlNotice(null), 4500);
+              } else if (msg.action === 'enable_screen_share') {
+                setPersonalScreenShareAllowed(true);
+                setControlNotice('Your screen sharing was enabled by the instructor.');
+                setTimeout(() => setControlNotice(null), 4500);
               }
             }
           }
@@ -417,8 +567,18 @@ const AgoraVideoSession = ({
       setClient(agoraClient);
       clientRef.current = agoraClient; // Also set the ref
 
-      // Join channel
-      await agoraClient.join(effectiveAppId, effectiveChannelName, token, uid);
+      // Join channel (retry once with a fresh UID if UID_CONFLICT occurs)
+      try {
+        await agoraClient.join(effectiveAppId, effectiveChannelName, token, uid);
+      } catch (joinErr) {
+        if (joinErr?.code === 'UID_CONFLICT' || String(joinErr?.message || '').includes('UID_CONFLICT')) {
+          uid = Math.floor(Math.random() * 10000000) + 1;
+          token = await agoraTokenService.generateToken(effectiveChannelName, userRole, uid);
+          await agoraClient.join(effectiveAppId, effectiveChannelName, token, uid);
+        } else {
+          throw joinErr;
+        }
+      }
       setIsJoined(true);
 
       // Automatically record student attendance in database
@@ -737,6 +897,7 @@ Your App ID (${appId}) is configured correctly. The issue is that App Certificat
         });
         setLocalVideoTrack(videoTrack);
         localVideoTrackRef.current = videoTrack;
+        cameraTrackRef.current = videoTrack;
         const currentClient = client || clientRef.current;
         if (currentClient) {
           await currentClient.publish([videoTrack]);
@@ -750,6 +911,8 @@ Your App ID (${appId}) is configured correctly. The issue is that App Certificat
       }
     } catch (err) {
       console.error('Failed to toggle video:', err);
+      setControlNotice('Could not access camera. Please allow camera permission in your browser settings.');
+      setTimeout(() => setControlNotice(null), 4500);
     }
   };
 
@@ -781,10 +944,17 @@ Your App ID (${appId}) is configured correctly. The issue is that App Certificat
       }
     } catch (err) {
       console.error('Failed to toggle audio:', err);
+      setControlNotice('Could not access microphone. Please allow microphone permission in your browser settings.');
+      setTimeout(() => setControlNotice(null), 4500);
     }
   };
 
   const startScreenShare = async () => {
+    if (!canScreenShare) {
+      setControlNotice('Screen sharing is currently disabled by the instructor.');
+      setTimeout(() => setControlNotice(null), 4000);
+      return;
+    }
     try {
       const AgoraRTCModule = await import('agora-rtc-sdk-ng');
       const AgoraRTC = AgoraRTCModule.default;
@@ -853,6 +1023,34 @@ Your App ID (${appId}) is configured correctly. The issue is that App Certificat
     } catch (error) {
       console.error('Failed to stop screen share:', error);
       setIsScreenSharing(false);
+    }
+  };
+  stopScreenShareRef.current = stopScreenShare;
+
+  const sendChatMessage = async (e) => {
+    e?.preventDefault();
+    if (!chatEnabled) return;
+    const trimmed = chatInput.trim();
+    if (!trimmed) return;
+
+    const msgObj = {
+      type: 'chat_msg',
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      senderName: studentName || 'Student',
+      senderRole: 'student',
+      text: trimmed,
+      timestamp: Date.now()
+    };
+
+    setChatMessages(prev => [...prev.slice(-199), { ...msgObj, isSelf: true }]);
+    setChatInput('');
+    try {
+      const current = client || clientRef.current;
+      if (current) {
+        await current.sendStreamMessage(JSON.stringify(msgObj));
+      }
+    } catch (err) {
+      console.warn('Failed to send chat message:', err);
     }
   };
 
@@ -1238,6 +1436,28 @@ Your App ID (${appId}) is configured correctly. The issue is that App Certificat
             )}
           </button>
 
+          {/* Screen Share Control for Student */}
+          <button
+            onClick={isScreenSharing ? stopScreenShare : startScreenShare}
+            disabled={!canScreenShare && !isScreenSharing}
+            className={`p-3 rounded-full transition-colors ${
+              isScreenSharing
+                ? 'bg-green-600 hover:bg-green-700'
+                : !canScreenShare
+                  ? 'bg-gray-700 opacity-50 cursor-not-allowed'
+                  : 'bg-gray-600 hover:bg-gray-500'
+            }`}
+            title={
+              isScreenSharing
+                ? 'Stop sharing screen'
+                : !canScreenShare
+                  ? 'Screen sharing disabled by instructor'
+                  : 'Share screen'
+            }
+          >
+            <Monitor size={20} className="text-white" />
+          </button>
+
           {/* Whiteboard Control for Student */}
           <button
             onClick={() => setShowWhiteboard(prev => !prev)}
@@ -1254,6 +1474,30 @@ Your App ID (${appId}) is configured correctly. The issue is that App Certificat
             )}
           </button>
 
+          {/* Chat Control */}
+          <button
+            onClick={() => {
+              setShowChat(prev => {
+                const next = !prev;
+                if (next) setUnreadChatCount(0);
+                return next;
+              });
+            }}
+            className={`p-3 rounded-full transition-colors relative ${
+              showChat
+                ? 'bg-blue-600 hover:bg-blue-700'
+                : 'bg-gray-600 hover:bg-gray-500'
+            }`}
+            title={showChat ? 'Hide chat' : 'Open chat'}
+          >
+            <MessageSquare size={20} className="text-white" />
+            {unreadChatCount > 0 && !showChat && (
+              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
+                {unreadChatCount > 9 ? '9+' : unreadChatCount}
+              </span>
+            )}
+          </button>
+
           {/* Settings */}
           <button 
             className="p-3 rounded-full bg-gray-600 hover:bg-gray-500 transition-colors"
@@ -1263,6 +1507,85 @@ Your App ID (${appId}) is configured correctly. The issue is that App Certificat
           </button>
         </div>
       </div>
+
+      {/* In-Call Chat Drawer */}
+      {showChat && (
+        <div className="fixed bottom-20 right-4 sm:right-6 w-80 sm:w-96 h-[400px] bg-gray-800 border border-gray-700 rounded-2xl shadow-2xl z-40 flex flex-col overflow-hidden">
+          <div className="px-4 py-3 bg-gray-900 border-b border-gray-700 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <MessageSquare size={18} className="text-blue-400" />
+              <h3 className="text-white font-semibold text-sm">Class Chat</h3>
+              {!chatEnabled && (
+                <span className="text-[10px] bg-red-500/20 text-red-300 border border-red-500/40 px-2 py-0.5 rounded-full">
+                  Disabled
+                </span>
+              )}
+            </div>
+            <button
+              onClick={() => setShowChat(false)}
+              className="text-gray-400 hover:text-white p-1 rounded"
+            >
+              <X size={16} />
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-3 space-y-2.5">
+            {chatMessages.length === 0 ? (
+              <div className="text-center text-gray-500 text-xs py-12">
+                {chatEnabled
+                  ? 'No messages yet. Ask a question!'
+                  : 'Chat is currently disabled by the instructor.'}
+              </div>
+            ) : (
+              chatMessages.map(m => (
+                <div
+                  key={m.id}
+                  className={`flex flex-col ${m.isSelf ? 'items-end' : 'items-start'}`}
+                >
+                  <span className="text-[11px] text-gray-400 mb-0.5 px-1">
+                    {m.isSelf ? 'You' : m.senderName}
+                    {m.senderRole === 'teacher' && !m.isSelf ? ' (Instructor)' : ''}
+                  </span>
+                  <div
+                    className={`max-w-[85%] rounded-xl px-3 py-2 text-sm break-words ${
+                      m.isSelf
+                        ? 'bg-blue-600 text-white'
+                        : m.senderRole === 'teacher'
+                          ? 'bg-purple-600/80 text-white'
+                          : 'bg-gray-700 text-gray-100'
+                    }`}
+                  >
+                    {m.text}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {chatEnabled ? (
+            <form onSubmit={sendChatMessage} className="p-3 bg-gray-900 border-t border-gray-700 flex items-center gap-2">
+              <input
+                type="text"
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                placeholder="Type a message..."
+                className="flex-1 bg-gray-800 text-white text-sm rounded-xl px-3 py-2 border border-gray-700 focus:outline-none focus:border-blue-500"
+              />
+              <button
+                type="submit"
+                disabled={!chatInput.trim()}
+                className="p-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white rounded-xl transition-colors"
+              >
+                <Send size={16} />
+              </button>
+            </form>
+          ) : (
+            <div className="p-3 bg-gray-900 border-t border-gray-700 text-center text-xs text-gray-400">
+              Chat is disabled by the instructor
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };
