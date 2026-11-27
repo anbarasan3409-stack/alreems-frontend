@@ -414,6 +414,11 @@ export const adminService = {
   },
 };
 
+const isSessionActiveOrScheduled = (status) => {
+  const s = String(status || '').toLowerCase();
+  return s === 'active' || s === 'scheduled' || s === 'ongoing' || s === 'live';
+};
+
 // Session Service (for students)
 export const sessionService = {
   // Get all sessions available to students (filtered by studentId if provided)
@@ -458,7 +463,7 @@ export const sessionService = {
         const startTime = new Date(session.start_time);
         const endTime = new Date(session.end_time);
         
-        return session.status === 'active' && 
+        return isSessionActiveOrScheduled(session.status) && 
                now >= startTime && 
                now <= endTime;
       });
@@ -484,7 +489,7 @@ export const sessionService = {
       const upcomingSessions = allSessions.filter(session => {
         const startTime = new Date(session.start_time);
         
-        return session.status === 'active' && 
+        return isSessionActiveOrScheduled(session.status) && 
                now < startTime;
       });
       
@@ -562,7 +567,7 @@ export const sessionService = {
       const startTime = new Date(session.start_time);
       const endTime = new Date(session.end_time);
       
-      const isLive = session.status === 'active' && 
+      const isLive = isSessionActiveOrScheduled(session.status) && 
                      now >= startTime && 
                      now <= endTime;
 
@@ -572,7 +577,7 @@ export const sessionService = {
           errorMsg = 'Session has not started yet';
         } else if (now > endTime) {
           errorMsg = 'Session has ended';
-        } else if (session.status !== 'active') {
+        } else if (!isSessionActiveOrScheduled(session.status)) {
           errorMsg = 'Session is not active';
         }
         throw new Error(errorMsg);
@@ -607,7 +612,7 @@ export const sessionService = {
       const startTime = new Date(session.start_time);
       const endTime = new Date(session.end_time);
       
-      const isLive = session.status === 'active' && 
+      const isLive = isSessionActiveOrScheduled(session.status) && 
                      now >= startTime && 
                      now <= endTime;
       
@@ -617,7 +622,7 @@ export const sessionService = {
           reason = 'Session has not started yet';
         } else if (now > endTime) {
           reason = 'Session has ended';
-        } else if (session.status !== 'active') {
+        } else if (!isSessionActiveOrScheduled(session.status)) {
           reason = 'Session is not active';
         }
       }

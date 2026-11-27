@@ -112,6 +112,34 @@ const AgoraVideoSession = ({
   const isScreenSharingRef = useRef(false);
   isScreenSharingRef.current = isScreenSharing;
   const stopScreenShareRef = useRef(null);
+  const hasMarkedLeaveRef = useRef(false);
+
+  const recordAttendanceLeave = () => {
+    if (hasMarkedLeaveRef.current) return;
+    if (!sessionId || !studentId || Number(studentId) <= 0) return;
+    hasMarkedLeaveRef.current = true;
+    try {
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:9000';
+      const url = `${backendUrl}/api/students/attendance/leave`;
+      const body = JSON.stringify({
+        session_id: Number(sessionId),
+        student_id: Number(studentId),
+      });
+      if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
+        const blob = new Blob([body], { type: 'application/json' });
+        navigator.sendBeacon(url, blob);
+      } else {
+        fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body,
+          keepalive: true,
+        }).catch(() => {});
+      }
+    } catch (e) {
+      // Non-blocking
+    }
+  };
   
   // Force video playback on user interaction
   const forceVideoPlayback = async () => {
@@ -224,6 +252,7 @@ const AgoraVideoSession = ({
   // Handle page reload/navigation to cleanup Agora session
   useEffect(() => {
     const cleanupResources = () => {
+      recordAttendanceLeave();
       try {
         if (cameraTrackRef.current) {
           try { cameraTrackRef.current.close(); } catch (e) {}
@@ -285,6 +314,7 @@ const AgoraVideoSession = ({
     // Cleanup function when component unmounts or page reloads
     return () => {
       isMounted = false;
+      recordAttendanceLeave();
       
       // Clean up Agora resources using refs (avoids stale closure)
       const cleanup = async () => {
