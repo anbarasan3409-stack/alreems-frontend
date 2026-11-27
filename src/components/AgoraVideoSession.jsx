@@ -147,20 +147,13 @@ const AgoraVideoSession = ({
 
 
       try {
-        // Ensure video element is properly configuredN
         const videoElement = localVideoRef.current;
         videoElement.muted = true;
         videoElement.autoplay = true;
         videoElement.playsInline = true;
 
-        const playPromise = localVideoTrack.play(videoElement, { mirror: !isScreenSharingRef.current });
-
-        playPromise.then(() => {
-
-          setVideoReady(true);
-        }).catch((error) => {
-          console.error('Force video playback failed:', error);
-        });
+        await Promise.resolve(localVideoTrack.play(videoElement, { mirror: !isScreenSharingRef.current }));
+        setVideoReady(true);
 
       } catch (error) {
         console.error('Error in force video playback:', error);
@@ -221,24 +214,22 @@ const AgoraVideoSession = ({
 
 
         // Always try to play, regardless of paused state
-        const playPromise = localVideoTrack.play(videoElement, { mirror: !isScreenSharingRef.current });
+        Promise.resolve(localVideoTrack.play(videoElement, { mirror: !isScreenSharingRef.current }))
+          .then(() => {
+            setVideoReady(true);
+          })
+          .catch((playError) => {
+            console.error('Failed to play video track:', playError);
 
-        playPromise.then(() => {
-
-          setVideoReady(true);
-        }).catch((playError) => {
-          console.error('Failed to play video track:', playError);
-
-          // Try again after a delay
-          setTimeout(() => {
-            if (localVideoRef.current && localVideoTrack) {
-
-              localVideoTrack.play(localVideoRef.current).catch(retryError => {
-                console.error('Retry failed:', retryError);
-              });
-            }
-          }, 1000);
-        });
+            // Try again after a delay
+            setTimeout(() => {
+              if (localVideoRef.current && localVideoTrack) {
+                Promise.resolve(localVideoTrack.play(localVideoRef.current, { mirror: !isScreenSharingRef.current })).catch((retryError) => {
+                  console.error('Retry failed:', retryError);
+                });
+              }
+            }, 1000);
+          });
 
       } catch (error) {
         console.error('Error ensuring video playback:', error);
@@ -518,9 +509,9 @@ const AgoraVideoSession = ({
               if (msg.action === 'mute_audio' || msg.action === 'mute_all_audio') {
                 if (localAudioTrackRef.current) {
                   try {
-                    await localAudioTrackRef.current.setEnabled(false);
+                    await localAudioTrackRef.current.setMuted(true);
                   } catch (e) {
-                    console.warn('Error disabling local audio track:', e);
+                    console.warn('Error muting local audio track:', e);
                   }
                 }
                 setIsAudioEnabled(false);
@@ -540,7 +531,7 @@ const AgoraVideoSession = ({
               } else if (msg.action === 'unmute_audio') {
                 try {
                   if (localAudioTrackRef.current) {
-                    await localAudioTrackRef.current.setEnabled(true);
+                    await localAudioTrackRef.current.setMuted(false);
                   } else {
                     const AgoraRTCModule = await import('agora-rtc-sdk-ng');
                     const AgoraRTC = AgoraRTCModule.default;
@@ -548,7 +539,7 @@ const AgoraVideoSession = ({
                       encoderConfig: "speech_standard",
                       AEC: true,
                       ANS: true,
-                      AGC: true,
+                      AGC: false,
                     });
                     setLocalAudioTrack(audioTrack);
                     localAudioTrackRef.current = audioTrack;
@@ -753,7 +744,7 @@ Your App ID (${appId}) is configured correctly. The issue is that App Certificat
             encoderConfig: "speech_standard",
             AEC: true,
             ANS: true,
-            AGC: true,
+            AGC: false,
           })
         ]);
       } catch (bothErr) {
@@ -763,7 +754,7 @@ Your App ID (${appId}) is configured correctly. The issue is that App Certificat
             encoderConfig: "speech_standard",
             AEC: true,
             ANS: true,
-            AGC: true,
+            AGC: false,
           });
         } catch (aErr) {
           console.warn('Microphone access failed:', aErr);
@@ -863,8 +854,9 @@ Your App ID (${appId}) is configured correctly. The issue is that App Certificat
       }
       
       if (mediaType === 'audio' && user.audioTrack) {
-
-        user.audioTrack.play();
+        if (!user.audioTrack.isPlaying) {
+          user.audioTrack.play();
+        }
       }
     } catch (error) {
       console.error('Error handling user published:', error);
@@ -978,10 +970,10 @@ Your App ID (${appId}) is configured correctly. The issue is that App Certificat
     try {
       if (localAudioTrack) {
         if (isAudioEnabled) {
-          await localAudioTrack.setEnabled(false);
+          await localAudioTrack.setMuted(true);
           setIsAudioEnabled(false);
         } else {
-          await localAudioTrack.setEnabled(true);
+          await localAudioTrack.setMuted(false);
           setIsAudioEnabled(true);
         }
       } else {
@@ -992,7 +984,7 @@ Your App ID (${appId}) is configured correctly. The issue is that App Certificat
           encoderConfig: "speech_standard",
           AEC: true,
           ANS: true,
-          AGC: true,
+          AGC: false,
         });
         setLocalAudioTrack(audioTrack);
         localAudioTrackRef.current = audioTrack;
@@ -1000,7 +992,7 @@ Your App ID (${appId}) is configured correctly. The issue is that App Certificat
         if (currentClient) {
           await currentClient.publish([audioTrack]);
         }
-        await audioTrack.setEnabled(true);
+        await audioTrack.setMuted(false);
         setIsAudioEnabled(true);
       }
     } catch (err) {
