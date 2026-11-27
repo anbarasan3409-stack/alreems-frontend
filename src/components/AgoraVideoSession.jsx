@@ -112,12 +112,37 @@ const AgoraVideoSession = ({
   const isScreenSharingRef = useRef(false);
   isScreenSharingRef.current = isScreenSharing;
   const stopScreenShareRef = useRef(null);
+  const hasMarkedAttendanceRef = useRef(false);
   const hasMarkedLeaveRef = useRef(false);
+  const userRolesRef = useRef(userRoles);
+  userRolesRef.current = userRoles;
+
+  const markStudentAttendance = () => {
+    if (hasMarkedAttendanceRef.current) return;
+    if (!sessionId || !studentId || Number(studentId) <= 0) return;
+    hasMarkedAttendanceRef.current = true;
+    hasMarkedLeaveRef.current = false;
+    try {
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:9000';
+      fetch(`${backendUrl}/api/students/attendance/mark`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: Number(sessionId),
+          student_id: Number(studentId)
+        })
+      }).catch(err => console.warn('Attendance auto-record background error:', err));
+    } catch (e) {
+      // Non-blocking
+    }
+  };
 
   const recordAttendanceLeave = () => {
+    if (!hasMarkedAttendanceRef.current) return; // Never start leave if attendance never started (instructor hadn't joined)
     if (hasMarkedLeaveRef.current) return;
     if (!sessionId || !studentId || Number(studentId) <= 0) return;
     hasMarkedLeaveRef.current = true;
+    hasMarkedAttendanceRef.current = false;
     try {
       const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:9000';
       const url = `${backendUrl}/api/students/attendance/leave`;
@@ -147,20 +172,13 @@ const AgoraVideoSession = ({
 
 
       try {
-        // Ensure video element is properly configuredN
         const videoElement = localVideoRef.current;
         videoElement.muted = true;
         videoElement.autoplay = true;
         videoElement.playsInline = true;
 
-        const playPromise = localVideoTrack.play(videoElement, { mirror: !isScreenSharingRef.current });
-
-        playPromise.then(() => {
-
-          setVideoReady(true);
-        }).catch((error) => {
-          console.error('Force video playback failed:', error);
-        });
+        await Promise.resolve(localVideoTrack.play(videoElement, { mirror: !isScreenSharingRef.current }));
+        setVideoReady(true);
 
       } catch (error) {
         console.error('Error in force video playback:', error);
@@ -221,24 +239,22 @@ const AgoraVideoSession = ({
 
 
         // Always try to play, regardless of paused state
-        const playPromise = localVideoTrack.play(videoElement, { mirror: !isScreenSharingRef.current });
+        Promise.resolve(localVideoTrack.play(videoElement, { mirror: !isScreenSharingRef.current }))
+          .then(() => {
+            setVideoReady(true);
+          })
+          .catch((playError) => {
+            console.error('Failed to play video track:', playError);
 
-        playPromise.then(() => {
-
-          setVideoReady(true);
-        }).catch((playError) => {
-          console.error('Failed to play video track:', playError);
-
-          // Try again after a delay
-          setTimeout(() => {
-            if (localVideoRef.current && localVideoTrack) {
-
-              localVideoTrack.play(localVideoRef.current).catch(retryError => {
-                console.error('Retry failed:', retryError);
-              });
-            }
-          }, 1000);
-        });
+            // Try again after a delay
+            setTimeout(() => {
+              if (localVideoRef.current && localVideoTrack) {
+                Promise.resolve(localVideoTrack.play(localVideoRef.current, { mirror: !isScreenSharingRef.current })).catch((retryError) => {
+                  console.error('Retry failed:', retryError);
+                });
+              }
+            }, 1000);
+          });
 
       } catch (error) {
         console.error('Error ensuring video playback:', error);
@@ -438,10 +454,20 @@ const AgoraVideoSession = ({
                   name: studentName,
                   email: studentEmail
                 }));
+                if (isScreenSharingRef.current) {
+                  await current.sendStreamMessage(JSON.stringify({
+                    type: 'student_screen_share',
+                    active: true,
+                    uid: myUid,
+                    name: studentName
+                  }));
+                }
               }
             } catch (replyErr) {
               console.warn('Failed to reply to role_query:', replyErr);
             }
+          } else if (msg.type === 'session_ended') {
+            recordAttendanceLeave();
           } else if (msg.type === 'user_role') {
             if (msg.uid && msg.role) {
               setUserRoles(prev => {
@@ -510,9 +536,9 @@ const AgoraVideoSession = ({
               if (msg.action === 'mute_audio' || msg.action === 'mute_all_audio') {
                 if (localAudioTrackRef.current) {
                   try {
-                    await localAudioTrackRef.current.setEnabled(false);
+                    await localAudioTrackRef.current.setMuted(true);
                   } catch (e) {
-                    console.warn('Error disabling local audio track:', e);
+                    console.warn('Error muting local audio track:', e);
                   }
                 }
                 setIsAudioEnabled(false);
@@ -532,7 +558,7 @@ const AgoraVideoSession = ({
               } else if (msg.action === 'unmute_audio') {
                 try {
                   if (localAudioTrackRef.current) {
-                    await localAudioTrackRef.current.setEnabled(true);
+                    await localAudioTrackRef.current.setMuted(false);
                   } else {
                     const AgoraRTCModule = await import('agora-rtc-sdk-ng');
                     const AgoraRTC = AgoraRTCModule.default;
@@ -540,7 +566,7 @@ const AgoraVideoSession = ({
                       encoderConfig: "speech_standard",
                       AEC: true,
                       ANS: true,
-                      AGC: true,
+                      AGC: false,
                     });
                     setLocalAudioTrack(audioTrack);
                     localAudioTrackRef.current = audioTrack;
@@ -624,23 +650,6 @@ const AgoraVideoSession = ({
         }
       }
       setIsJoined(true);
-
-      // Automatically record student attendance in database
-      if (sessionId && studentId && Number(studentId) > 0) {
-        try {
-          const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:9000';
-          fetch(`${backendUrl}/api/students/attendance/mark`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              session_id: Number(sessionId),
-              student_id: Number(studentId)
-            })
-          }).catch(err => console.warn('Attendance auto-record background error:', err));
-        } catch (e) {
-          // Non-blocking
-        }
-      }
 
       // Broadcast student name & profile and request whiteboard state via Agora Data Stream
       const broadcastProfileAndSync = async () => {
@@ -745,7 +754,7 @@ Your App ID (${appId}) is configured correctly. The issue is that App Certificat
             encoderConfig: "speech_standard",
             AEC: true,
             ANS: true,
-            AGC: true,
+            AGC: false,
           })
         ]);
       } catch (bothErr) {
@@ -755,7 +764,7 @@ Your App ID (${appId}) is configured correctly. The issue is that App Certificat
             encoderConfig: "speech_standard",
             AEC: true,
             ANS: true,
-            AGC: true,
+            AGC: false,
           });
         } catch (aErr) {
           console.warn('Microphone access failed:', aErr);
@@ -855,8 +864,9 @@ Your App ID (${appId}) is configured correctly. The issue is that App Certificat
       }
       
       if (mediaType === 'audio' && user.audioTrack) {
-
-        user.audioTrack.play();
+        if (!user.audioTrack.isPlaying) {
+          user.audioTrack.play();
+        }
       }
     } catch (error) {
       console.error('Error handling user published:', error);
@@ -905,18 +915,36 @@ Your App ID (${appId}) is configured correctly. The issue is that App Certificat
   };
 
   const handleUserLeft = (user) => {
+    const leavingRole =
+      userRolesRef.current.get(user.uid) ||
+      userRolesRef.current.get(Number(user.uid)) ||
+      userRolesRef.current.get(String(user.uid));
 
-    
+    if (leavingRole === 'teacher') {
+      recordAttendanceLeave();
+    }
+
     // Remove immediately - no delay needed with proper cleanup
     setRemoteUsers(prev => {
       const newMap = new Map(prev);
       if (newMap.has(user.uid)) {
-
         newMap.delete(user.uid);
       }
       return newMap;
     });
   };
+
+  // Start student attendance ONLY once an instructor (role === 'teacher') is present in the channel
+  useEffect(() => {
+    if (!isJoined) return;
+    const instructorPresent = Array.from(remoteUsers.values()).some((u) => {
+      const r = userRoles.get(u.uid) || userRoles.get(Number(u.uid)) || userRoles.get(String(u.uid));
+      return r === 'teacher';
+    });
+    if (instructorPresent) {
+      markStudentAttendance();
+    }
+  }, [isJoined, remoteUsers, userRoles]);
 
   // Control functions
   const toggleVideo = async () => {
@@ -970,10 +998,10 @@ Your App ID (${appId}) is configured correctly. The issue is that App Certificat
     try {
       if (localAudioTrack) {
         if (isAudioEnabled) {
-          await localAudioTrack.setEnabled(false);
+          await localAudioTrack.setMuted(true);
           setIsAudioEnabled(false);
         } else {
-          await localAudioTrack.setEnabled(true);
+          await localAudioTrack.setMuted(false);
           setIsAudioEnabled(true);
         }
       } else {
@@ -984,7 +1012,7 @@ Your App ID (${appId}) is configured correctly. The issue is that App Certificat
           encoderConfig: "speech_standard",
           AEC: true,
           ANS: true,
-          AGC: true,
+          AGC: false,
         });
         setLocalAudioTrack(audioTrack);
         localAudioTrackRef.current = audioTrack;
@@ -992,7 +1020,7 @@ Your App ID (${appId}) is configured correctly. The issue is that App Certificat
         if (currentClient) {
           await currentClient.publish([audioTrack]);
         }
-        await audioTrack.setEnabled(true);
+        await audioTrack.setMuted(false);
         setIsAudioEnabled(true);
       }
     } catch (err) {
@@ -1033,6 +1061,16 @@ Your App ID (${appId}) is configured correctly. The issue is that App Certificat
       setIsScreenSharing(true);
       setIsVideoEnabled(true);
 
+      // Notify teacher/participants that this student is sharing screen (so UI can focus it in center)
+      try {
+        await currentClient.sendStreamMessage(JSON.stringify({
+          type: 'student_screen_share',
+          active: true,
+          uid: currentClient.uid,
+          name: studentName
+        }));
+      } catch (e) {}
+
       // Listen for screen share end
       screenTrack.on('track-ended', () => {
         stopScreenShare();
@@ -1054,6 +1092,15 @@ Your App ID (${appId}) is configured correctly. The issue is that App Certificat
         activeScreenTrack.close();
         screenTrackRef.current = null;
       }
+
+      try {
+        await currentClient.sendStreamMessage(JSON.stringify({
+          type: 'student_screen_share',
+          active: false,
+          uid: currentClient.uid,
+          name: studentName
+        }));
+      } catch (e) {}
 
       let camTrack = cameraTrackRef.current;
       if (!camTrack) {
