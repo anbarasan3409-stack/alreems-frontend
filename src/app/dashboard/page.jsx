@@ -313,7 +313,9 @@ const Dashboard = () => {
                   const start = new Date(session.start_time);
                   const end = new Date(session.end_time);
                   const statusLower = String(session.status || '').toLowerCase();
-                  const isLive = session._isLive || (['active', 'scheduled', 'ongoing', 'live'].includes(statusLower) && now >= start && now <= end);
+                  const isLive = session._isLive ||
+                    ['active', 'ongoing', 'live'].includes(statusLower) ||
+                    (statusLower === 'scheduled' && now >= start && now <= end);
 
                   return (
                     <div

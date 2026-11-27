@@ -355,9 +355,11 @@ const Schedule = () => {
               <div className="grid grid-cols-7 gap-2">
                 {generateCalendarDays().map((date, index) => {
                   const sessionsForDate = getSessionsForDate(date);
-                  const hasLiveSessions = date && sessionsForDate.some(s => 
-                    liveSessions?.some(live => live.id === s.id)
-                  );
+                  const hasLiveSessions = date && sessionsForDate.some(s => {
+                    const sStatus = String(s.status || s.Status || '').toLowerCase();
+                    return ['active', 'ongoing', 'live'].includes(sStatus) ||
+                      liveSessions?.some(live => (live.id || live.ID) === (s.id || s.ID));
+                  });
 
                   return (
                     <button
@@ -403,7 +405,9 @@ const Schedule = () => {
               ) : (
                 <div className="space-y-3">
                   {todaySessions.map(session => {
-                    const isLive = liveSessions?.some(live => (live.id || live.ID) === (session.id || session.ID));
+                    const sStatus = String(session.status || session.Status || '').toLowerCase();
+                    const isLive = ['active', 'ongoing', 'live'].includes(sStatus) ||
+                      liveSessions?.some(live => (live.id || live.ID) === (session.id || session.ID));
                     return (
                       <SessionCard key={session.id || session.ID} session={session} isLive={isLive} />
                     );
@@ -429,9 +433,14 @@ const Schedule = () => {
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {selectedDateSessions.map(session => (
-                      <SessionCard key={session.id || session.ID} session={session} />
-                    ))}
+                    {selectedDateSessions.map(session => {
+                      const sStatus = String(session.status || session.Status || '').toLowerCase();
+                      const isLive = ['active', 'ongoing', 'live'].includes(sStatus) ||
+                        liveSessions?.some(live => (live.id || live.ID) === (session.id || session.ID));
+                      return (
+                        <SessionCard key={session.id || session.ID} session={session} isLive={isLive} />
+                      );
+                    })}
                   </div>
                 )}
               </div>
