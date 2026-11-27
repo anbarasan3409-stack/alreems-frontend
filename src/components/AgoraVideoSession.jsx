@@ -200,32 +200,41 @@ const AgoraVideoSession = ({
 
   // Handle page reload/navigation to cleanup Agora session
   useEffect(() => {
-    const handleBeforeUnload = async (e) => {
-
-      
-      // Synchronous cleanup for beforeunload
+    const cleanupResources = () => {
       try {
-        if (localVideoTrack) {
-          localVideoTrack.close();
+        if (cameraTrackRef.current) {
+          try { cameraTrackRef.current.close(); } catch (e) {}
+          cameraTrackRef.current = null;
         }
-        if (localAudioTrack) {
-          localAudioTrack.close();
+        if (screenTrackRef.current) {
+          try { screenTrackRef.current.close(); } catch (e) {}
+          screenTrackRef.current = null;
+        }
+        if (localVideoTrackRef.current) {
+          try { localVideoTrackRef.current.close(); } catch (e) {}
+        }
+        if (localAudioTrackRef.current) {
+          try { localAudioTrackRef.current.close(); } catch (e) {}
         }
         if (clientRef.current) {
-          clientRef.current.leave();
+          clientRef.current.leave().catch(() => {});
           clientRef.current.removeAllListeners();
         }
       } catch (error) {
-        console.error('Error in beforeunload cleanup:', error);
+        console.error('Error in navigation cleanup:', error);
       }
     };
 
-    window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('beforeunload', cleanupResources);
+    window.addEventListener('pagehide', cleanupResources);
+    window.addEventListener('popstate', cleanupResources);
     
     return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('beforeunload', cleanupResources);
+      window.removeEventListener('pagehide', cleanupResources);
+      window.removeEventListener('popstate', cleanupResources);
     };
-  }, [localVideoTrack, localAudioTrack]);
+  }, []);
 
   // Initialize Agora SDK
   useEffect(() => {
@@ -254,27 +263,28 @@ const AgoraVideoSession = ({
     return () => {
       isMounted = false;
       
-      // Clean up Agora resources
+      // Clean up Agora resources using refs (avoids stale closure)
       const cleanup = async () => {
         try {
-
-          
-          // Close local tracks
-          if (localVideoTrack) {
-            localVideoTrack.close();
+          if (cameraTrackRef.current) {
+            try { cameraTrackRef.current.close(); } catch (e) {}
+            cameraTrackRef.current = null;
           }
-          if (localAudioTrack) {
-            localAudioTrack.close();
+          if (screenTrackRef.current) {
+            try { screenTrackRef.current.close(); } catch (e) {}
+            screenTrackRef.current = null;
           }
-          
-          // Leave channel and clean up client
+          if (localVideoTrackRef.current) {
+            try { localVideoTrackRef.current.close(); } catch (e) {}
+          }
+          if (localAudioTrackRef.current) {
+            try { localAudioTrackRef.current.close(); } catch (e) {}
+          }
           if (clientRef.current) {
             await clientRef.current.leave();
             clientRef.current.removeAllListeners();
             clientRef.current = null;
           }
-          
-
         } catch (error) {
           console.error('Error during cleanup:', error);
         }
@@ -300,13 +310,12 @@ const AgoraVideoSession = ({
       // Guard: fallback to sessionId if channelName is missing
       const effectiveChannelName = channelName || `session_${sessionId}`;
 
-      // Use student's numeric database ID as Agora UID if available, else random fallback
-      const uid = studentId && !isNaN(Number(studentId)) && Number(studentId) > 0
-        ? Number(studentId)
-        : Math.floor(Math.random() * 1000000) + 1;
+      // Use a fresh unique UID per join to prevent UID_CONFLICT on rapid rejoin / back navigation
+      // (studentId and studentName are broadcast via student_info stream message)
+      let uid = Math.floor(Math.random() * 10000000) + 1;
 
       // Generate token for the channel
-      const token = await agoraTokenService.generateToken(effectiveChannelName, userRole, uid);
+      let token = await agoraTokenService.generateToken(effectiveChannelName, userRole, uid);
 
       // Create Agora client with different modes to handle certificate issues
       let agoraClient;
@@ -417,8 +426,18 @@ const AgoraVideoSession = ({
       setClient(agoraClient);
       clientRef.current = agoraClient; // Also set the ref
 
-      // Join channel
-      await agoraClient.join(effectiveAppId, effectiveChannelName, token, uid);
+      // Join channel (retry once with a fresh UID if UID_CONFLICT occurs)
+      try {
+        await agoraClient.join(effectiveAppId, effectiveChannelName, token, uid);
+      } catch (joinErr) {
+        if (joinErr?.code === 'UID_CONFLICT' || String(joinErr?.message || '').includes('UID_CONFLICT')) {
+          uid = Math.floor(Math.random() * 10000000) + 1;
+          token = await agoraTokenService.generateToken(effectiveChannelName, userRole, uid);
+          await agoraClient.join(effectiveAppId, effectiveChannelName, token, uid);
+        } else {
+          throw joinErr;
+        }
+      }
       setIsJoined(true);
 
       // Automatically record student attendance in database
