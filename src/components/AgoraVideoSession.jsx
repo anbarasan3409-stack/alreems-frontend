@@ -756,6 +756,7 @@ Your App ID (${appId}) is configured correctly. The issue is that App Certificat
         });
         setLocalVideoTrack(videoTrack);
         localVideoTrackRef.current = videoTrack;
+        cameraTrackRef.current = videoTrack;
         const currentClient = client || clientRef.current;
         if (currentClient) {
           await currentClient.publish([videoTrack]);
@@ -769,6 +770,8 @@ Your App ID (${appId}) is configured correctly. The issue is that App Certificat
       }
     } catch (err) {
       console.error('Failed to toggle video:', err);
+      setControlNotice('Could not access camera. Please allow camera permission in your browser settings.');
+      setTimeout(() => setControlNotice(null), 4500);
     }
   };
 
@@ -800,6 +803,8 @@ Your App ID (${appId}) is configured correctly. The issue is that App Certificat
       }
     } catch (err) {
       console.error('Failed to toggle audio:', err);
+      setControlNotice('Could not access microphone. Please allow microphone permission in your browser settings.');
+      setTimeout(() => setControlNotice(null), 4500);
     }
   };
 
