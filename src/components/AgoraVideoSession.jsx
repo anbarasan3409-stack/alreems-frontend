@@ -438,6 +438,14 @@ const AgoraVideoSession = ({
                   name: studentName,
                   email: studentEmail
                 }));
+                if (isScreenSharingRef.current) {
+                  await current.sendStreamMessage(JSON.stringify({
+                    type: 'student_screen_share',
+                    active: true,
+                    uid: myUid,
+                    name: studentName
+                  }));
+                }
               }
             } catch (replyErr) {
               console.warn('Failed to reply to role_query:', replyErr);
@@ -1033,6 +1041,16 @@ Your App ID (${appId}) is configured correctly. The issue is that App Certificat
       setIsScreenSharing(true);
       setIsVideoEnabled(true);
 
+      // Notify teacher/participants that this student is sharing screen (so UI can focus it in center)
+      try {
+        await currentClient.sendStreamMessage(JSON.stringify({
+          type: 'student_screen_share',
+          active: true,
+          uid: currentClient.uid,
+          name: studentName
+        }));
+      } catch (e) {}
+
       // Listen for screen share end
       screenTrack.on('track-ended', () => {
         stopScreenShare();
@@ -1054,6 +1072,15 @@ Your App ID (${appId}) is configured correctly. The issue is that App Certificat
         activeScreenTrack.close();
         screenTrackRef.current = null;
       }
+
+      try {
+        await currentClient.sendStreamMessage(JSON.stringify({
+          type: 'student_screen_share',
+          active: false,
+          uid: currentClient.uid,
+          name: studentName
+        }));
+      } catch (e) {}
 
       let camTrack = cameraTrackRef.current;
       if (!camTrack) {
